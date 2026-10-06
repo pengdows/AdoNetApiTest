@@ -13,8 +13,19 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	[Fact]
 	public virtual void DbProviderFactory_CreateCommand_is_not_null() => Assert.NotNull(Fixture.Factory.CreateCommand());
 
+	/// <summary>
+	/// The factory must not be required to implement command builders. When the
+	/// capability flag is available, it must agree with the factory result.
+	/// </summary>
+#if NETSTANDARD2_0
 	[Fact]
-	public virtual void DbProviderFactory_CreateCommandBuilder_is_not_null() => Assert.NotNull(Fixture.Factory.CreateCommandBuilder());
+	public virtual void DbProviderFactory_CreateCommandBuilder_matches_capability() =>
+		throw Xunit.Sdk.SkipException.ForSkip("CanCreateCommandBuilder is not available on this TargetFramework");
+#else
+	[Fact]
+	public virtual void DbProviderFactory_CreateCommandBuilder_matches_capability() =>
+		Assert.Equal(Fixture.Factory.CanCreateCommandBuilder, Fixture.Factory.CreateCommandBuilder() is not null);
+#endif
 
 	[Fact]
 	public virtual void DbProviderFactory_CreateConnection_is_not_null() => Assert.NotNull(Fixture.Factory.CreateConnection());
@@ -22,32 +33,23 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	[Fact]
 	public virtual void DbProviderFactory_CreateConnectionStringBuilder_is_not_null() => Assert.NotNull(Fixture.Factory.CreateConnectionStringBuilder());
 
+	/// <summary>
+	/// The factory must not be required to implement data adapters. When the
+	/// capability flag is available, it must agree with the factory result.
+	/// </summary>
+#if NETSTANDARD2_0
 	[Fact]
-	public virtual void DbProviderFactory_CreateDataAdapter_is_not_null() => Assert.NotNull(Fixture.Factory.CreateDataAdapter());
-
+	public virtual void DbProviderFactory_CreateDataAdapter_matches_capability() =>
+		throw Xunit.Sdk.SkipException.ForSkip("CanCreateDataAdapter is not available on this TargetFramework");
+#else
 	[Fact]
-	public virtual void DbProviderFactory_CreateDataSourceEnumerator_is_null() => Assert.Null(Fixture.Factory.CreateDataSourceEnumerator());
+	public virtual void DbProviderFactory_CreateDataAdapter_matches_capability() =>
+		Assert.Equal(Fixture.Factory.CanCreateDataAdapter, Fixture.Factory.CreateDataAdapter() is not null);
+#endif
 
 	[Fact]
 	public virtual void DbProviderFactory_CreateParameter_is_not_null() => Assert.NotNull(Fixture.Factory.CreateParameter());
 
 	[Fact]
-	public virtual void DbProviderFactory_CanCreateDataSourceEnumerator_is_false() => Assert.False(Fixture.Factory.CanCreateDataSourceEnumerator);
-
-	[Fact]
 	public virtual void DbProviderFactory_CanCreateDataSourceEnumerator_is_accurate() => Assert.Equal(Fixture.Factory.CanCreateDataSourceEnumerator, Fixture.Factory.CreateDataSourceEnumerator() is object);
-
-#if NETSTANDARD2_0
-	[Fact]
-	public virtual void DbProviderFactory_CanCreateCommandBuilder_is_true() => throw Xunit.Sdk.SkipException.ForSkip("Not supported on this TargetFramework");
-
-	[Fact]
-	public virtual void DbProviderFactory_CanCreateDataAdapter_is_true() => throw Xunit.Sdk.SkipException.ForSkip("Not supported on this TargetFramework");
-#else
-	[Fact]
-	public virtual void DbProviderFactory_CanCreateCommandBuilder_is_true() => Assert.True(Fixture.Factory.CanCreateCommandBuilder);
-
-	[Fact]
-	public virtual void DbProviderFactory_CanCreateDataAdapter_is_true() => Assert.True(Fixture.Factory.CanCreateDataAdapter);
-#endif
 }
