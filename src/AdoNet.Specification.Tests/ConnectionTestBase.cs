@@ -82,10 +82,11 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	}
 
 	[Fact]
-	public virtual void ServerVersion_is_a_string_when_open()
+	public virtual void ServerVersion_returns_value()
 	{
 		using var connection = CreateOpenConnection();
 		Assert.NotNull(connection.ServerVersion);
+		Assert.NotEmpty(connection.ServerVersion);
 	}
 
 	[Fact]
