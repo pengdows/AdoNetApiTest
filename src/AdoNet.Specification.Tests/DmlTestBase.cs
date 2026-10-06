@@ -24,6 +24,7 @@ public abstract class DmlTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// count, including zero when the predicate matches no rows.
 	/// This is the contract consumed by optimistic-concurrency code: a zero count
 	/// means that no row matched the write predicate.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executenonquery.
 	/// </summary>
 	[Fact]
 	public virtual void ExecuteNonQuery_returns_affected_rows_for_DML()

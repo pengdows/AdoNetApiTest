@@ -109,6 +109,7 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// Named versus positional parameter requirements are provider-specific. The
 	/// SQL marker is discovered separately; providers with different parameter-name
 	/// requirements can override this implementation-comparison diagnostic.
+	/// See https://learn.microsoft.com/dotnet/framework/data/adonet/configuring-parameters-and-parameter-data-types.
 	/// </summary>
 	[Fact]
 	public virtual void Bind_requires_set_name()
@@ -247,6 +248,7 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// <summary>
 	/// This preserves the suite's original stream-parameter diagnostic. Providers
 	/// that do not support stream values can override it.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbparameter.value.
 	/// </summary>
 	[Fact]
 	public virtual void Bind_works_with_stream()

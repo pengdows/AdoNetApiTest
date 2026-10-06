@@ -78,6 +78,12 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	[Fact]
 	public virtual void DbProviderFactory_CreateParameter_is_not_null() => Assert.NotNull(Fixture.Factory.CreateParameter());
 
+	/// <summary>
+	/// The capability flag must agree with whether the factory creates a data-source
+	/// enumerator. Providers that expose this optional API remain visible in the
+	/// comparison output.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.cancreatedatasourceenumerator.
+	/// </summary>
 	[Fact]
 	public virtual void DbProviderFactory_CanCreateDataSourceEnumerator_is_accurate() => Assert.Equal(Fixture.Factory.CanCreateDataSourceEnumerator, Fixture.Factory.CreateDataSourceEnumerator() is object);
 
@@ -90,6 +96,11 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	public virtual void DbProviderFactory_CreateDataSourceEnumerator_is_null()
 		=> Assert.Null(Fixture.Factory.CreateDataSourceEnumerator());
 
+	/// <summary>
+	/// Retained as the original implementation-comparison diagnostic for providers
+	/// expected not to expose a data-source enumerator; providers may override it.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.cancreatedatasourceenumerator.
+	/// </summary>
 	[Fact]
 	public virtual void DbProviderFactory_CanCreateDataSourceEnumerator_is_false()
 		=> Assert.False(Fixture.Factory.CanCreateDataSourceEnumerator);
