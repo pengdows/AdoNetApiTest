@@ -299,6 +299,24 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	}
 
 	[Fact]
+	public virtual void ExecuteReader_comment_only_is_empty_or_rejected()
+	{
+		using var connection = CreateOpenConnection();
+		using var command = connection.CreateCommand();
+		command.CommandText = "-- A comment-only command";
+
+		try
+		{
+			using var reader = command.ExecuteReader();
+			Assert.False(reader.HasRows);
+		}
+		catch (DbException)
+		{
+			// Providers may reject a command that contains no executable statement.
+		}
+	}
+
+	[Fact]
 	public virtual void ExecuteReader_works_when_trailing_comments()
 	{
 		using var connection = CreateOpenConnection();
