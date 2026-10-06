@@ -1,6 +1,7 @@
 using System;
 using System.Data;
 using System.Data.Common;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -11,6 +12,8 @@ namespace AdoNet.Specification.Tests;
 public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable, IClassFixture<TFixture>
 	where TFixture : class, IDbFactoryFixture
 {
+	private static readonly ConditionalWeakTable<TFixture, ParameterFormat> s_parameterFormats = new();
+
 	protected DbFactoryTestBase(TFixture fixture)
 	{
 		Fixture = fixture;
@@ -67,6 +70,16 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 	/// </summary>
 	protected virtual string MakeParameterName(DbConnection connection, string name)
 	{
+		var format = s_parameterFormats.GetValue(Fixture, _ => ReadParameterFormat(connection));
+		if (format.IsPositional)
+			return "?";
+
+		var parameterName = name.TrimStart('@', ':', '$', '?');
+		return string.Concat(format.Marker, parameterName);
+	}
+
+	private static ParameterFormat ReadParameterFormat(DbConnection connection)
+	{
 		var schema = connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
 		if (schema.Rows.Count == 0)
 			throw new InvalidOperationException("DataSourceInformation did not return a row.");
@@ -76,20 +89,19 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 			throw new InvalidOperationException("DataSourceInformation did not advertise ParameterMarkerFormat.");
 
 		if (markerFormat == "?")
-			return "?";
+			return new ParameterFormat(true, null);
 
 		const string placeholder = "{0}";
 		var placeholderIndex = markerFormat.IndexOf(placeholder, StringComparison.Ordinal);
 		if (placeholderIndex < 0)
 			throw new InvalidOperationException($"Invalid ParameterMarkerFormat '{markerFormat}'.");
 
-		var parameterName = name.TrimStart('@', ':', '$', '?');
 		var parameterMarker = markerFormat.Substring(0, placeholderIndex);
 		if (markerFormat == placeholder)
 		{
 			var markerPattern = schema.Rows[0][DbMetaDataColumnNames.ParameterMarkerPattern] as string;
 			if (markerPattern?.IndexOf('?') >= 0)
-				return "?";
+				return new ParameterFormat(true, null);
 
 			if (markerPattern?.IndexOf('@') >= 0)
 				parameterMarker = "@";
@@ -102,9 +114,21 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 		}
 
 		if (string.IsNullOrEmpty(parameterMarker))
-			return "?";
+			throw new InvalidOperationException($"Invalid ParameterMarkerFormat '{markerFormat}'.");
 
-		return string.Concat(parameterMarker, parameterName);
+		return new ParameterFormat(false, parameterMarker);
+	}
+
+	private sealed class ParameterFormat
+	{
+		public ParameterFormat(bool isPositional, string marker)
+		{
+			IsPositional = isPositional;
+			Marker = marker;
+		}
+
+		public bool IsPositional { get; }
+		public string Marker { get; }
 	}
 
 	/// <summary>
