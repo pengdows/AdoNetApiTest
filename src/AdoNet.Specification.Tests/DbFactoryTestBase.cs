@@ -85,10 +85,12 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 			return "?";
 
 		const string placeholder = "{0}";
-		if (markerFormat.IndexOf(placeholder, StringComparison.Ordinal) < 0)
+		var placeholderIndex = markerFormat.IndexOf(placeholder, StringComparison.Ordinal);
+		if (placeholderIndex < 0)
 			return "?";
 
 		var parameterName = name.TrimStart('@', ':', '$', '?');
+		var parameterMarker = markerFormat.Substring(0, placeholderIndex);
 		if (markerFormat == placeholder)
 		{
 			var markerPattern = schema.Rows[0][DbMetaDataColumnNames.ParameterMarkerPattern] as string;
@@ -96,17 +98,27 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 				return "?";
 
 			if (markerPattern?.IndexOf('@') >= 0)
-				return "@" + parameterName;
+				parameterMarker = "@";
 
-			if (markerPattern?.IndexOf(':') >= 0)
-				return ":" + parameterName;
+			else if (markerPattern?.IndexOf(':') >= 0)
+				parameterMarker = ":";
 
-			if (markerPattern?.IndexOf('$') >= 0)
-				return "$" + parameterName;
+			else if (markerPattern?.IndexOf('$') >= 0)
+				parameterMarker = "$";
 		}
 
-		return markerFormat.Replace(placeholder, parameterName);
+		if (string.IsNullOrEmpty(parameterMarker))
+			return "?";
+
+		return string.Concat(parameterMarker, parameterName);
 	}
+
+	/// <summary>
+	/// Formats a provider parameter from its logical name using the same named-versus-
+	/// positional decision as <see cref="MakeParameterName(DbConnection, string)"/>.
+	/// </summary>
+	protected virtual string MakeParameterName(DbConnection connection, DbParameter parameter)
+		=> MakeParameterName(connection, parameter.ParameterName);
 
 	protected virtual string ConnectionString
 	{

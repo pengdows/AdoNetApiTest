@@ -1,7 +1,6 @@
 using System;
 using System.Data;
 using System.Data.Common;
-using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Sdk;
@@ -423,9 +422,9 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	}
 
 	/// <summary>
-	/// ExecuteScalar returns an object, and providers may represent textual data as
-	/// a string or UTF-8 bytes. The contract tested here is the returned text value,
-	/// not an incidental provider CLR type.
+	/// ExecuteScalar returns the first column of the first row as an object. This
+	/// diagnostic preserves the suite's original textual representation assertion;
+	/// providers with a different representation can override it.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executescalar.
 	/// </summary>
 	[Fact]
@@ -434,14 +433,7 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
 		command.CommandText = "SELECT 'test';";
-		var result = command.ExecuteScalar();
-		var text = result switch
-		{
-			string value => value,
-			byte[] bytes => Encoding.UTF8.GetString(bytes),
-			_ => Convert.ToString(result)
-		};
-		Assert.Equal("test", text);
+		Assert.Equal("test", command.ExecuteScalar());
 	}
 
 	[Fact]

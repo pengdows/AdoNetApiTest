@@ -224,9 +224,9 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	}
 
 	/// <summary>
-	/// DbParameter.Value accepts provider-supported CLR values; byte arrays are the
-	/// provider-neutral binary value used by this suite. Providers may expose the
-	/// returned binary value as a byte array or a readable stream.
+	/// DbParameter.Value accepts provider-supported CLR values; this preserves the
+	/// suite's original byte-array round-trip assertion. Providers with a different
+	/// representation can override the test.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbparameter.value.
 	/// </summary>
 	[Fact]
@@ -241,14 +241,11 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		command.Parameters.Add(parameter);
 
 		var result = command.ExecuteScalar();
-		Assert.Equal(new byte[] { 1, 2, 3, 4 }, ReadBlob(result));
+		Assert.Equal(new byte[] { 1, 2, 3, 4 }, result);
 	}
 
 	/// <summary>
-	/// Stream-valued parameters are not required by the provider-neutral ADO.NET
-	/// contract; the original test incorrectly treated this optional behavior as
-	/// universal. Byte-array binding is covered separately because it is the common
-	/// binary value representation. This remains an active diagnostic; providers
+	/// This preserves the suite's original stream-parameter diagnostic. Providers
 	/// that do not support stream values can override it.
 	/// </summary>
 	[Fact]
@@ -264,24 +261,7 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		command.Parameters.Add(parameter);
 
 		var result = command.ExecuteScalar();
-		Assert.Equal(new byte[] { 1, 2, 3, 4 }, ReadBlob(result));
-	}
-
-	private static byte[] ReadBlob(object value)
-	{
-		return value switch
-		{
-			byte[] bytes => bytes,
-			Stream stream => ReadStream(stream),
-			_ => throw new InvalidOperationException($"Expected a byte array or stream, got {value?.GetType().FullName ?? "null"}.")
-		};
-	}
-
-	private static byte[] ReadStream(Stream stream)
-	{
-		using var buffer = new MemoryStream();
-		stream.CopyTo(buffer);
-		return buffer.ToArray();
+		Assert.Equal(new byte[] { 1, 2, 3, 4 }, result);
 	}
 
 	[Fact]
