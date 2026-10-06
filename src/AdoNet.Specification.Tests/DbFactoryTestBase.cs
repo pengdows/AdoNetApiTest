@@ -1,4 +1,5 @@
 using System;
+using System.Data;
 using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
@@ -53,6 +54,47 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 
 	protected virtual DbConnectionStringBuilder CreateConnectionStringBuilder()
 		=> Fixture.Factory.CreateConnectionStringBuilder();
+
+	/// <summary>Gets the named-parameter marker advertised by DataSourceInformation.</summary>
+	protected virtual string ParameterMarker
+	{
+		get
+		{
+			using var connection = CreateOpenConnection();
+			return GetParameterMarker(connection);
+		}
+	}
+
+	protected string ParameterName(DbConnection connection, string name) => GetParameterMarker(connection) + name;
+
+	protected string ParameterName(string name) => ParameterMarker + name;
+
+	private static string GetParameterMarker(DbConnection connection)
+	{
+		var schema = connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
+		if (schema.Rows.Count == 0)
+			throw new InvalidOperationException("DataSourceInformation did not return a row.");
+
+		var markerFormat = schema.Rows[0][DbMetaDataColumnNames.ParameterMarkerFormat] as string;
+		if (string.IsNullOrEmpty(markerFormat))
+			throw Xunit.Sdk.SkipException.ForSkip("Provider does not advertise a named parameter marker.");
+
+		const string placeholder = "{0}";
+		var placeholderIndex = markerFormat.IndexOf(placeholder, StringComparison.Ordinal);
+		if (placeholderIndex < 0)
+			throw new InvalidOperationException($"Invalid ParameterMarkerFormat '{markerFormat}'.");
+
+		if (markerFormat == placeholder)
+		{
+			var markerPattern = schema.Rows[0][DbMetaDataColumnNames.ParameterMarkerPattern] as string;
+			if (markerPattern?.IndexOf('@') >= 0)
+				return "@";
+			if (markerPattern?.IndexOf('?') >= 0)
+				return "?";
+		}
+
+		return markerFormat[..placeholderIndex];
+	}
 
 	protected virtual string ConnectionString
 	{

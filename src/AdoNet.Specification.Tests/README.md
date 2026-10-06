@@ -25,6 +25,11 @@ public class DbFactoryFixture : IDbFactoryFixture
 }
 ```
 
+Named-parameter tests read `DataSourceInformation.ParameterMarkerFormat` from the
+provider connection. This keeps them aligned with the provider contract instead of
+assuming that the parameter marker is `@`; providers that do not advertise a named
+parameter marker skip those tests.
+
 Then write test classes that inherit from the classes in this package, e.g.,
 
 ```csharp

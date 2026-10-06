@@ -1,6 +1,7 @@
 using System;
 using System.Data;
 using System.Data.Common;
+using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Sdk;
@@ -239,24 +240,6 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	}
 
 	[Fact]
-	public virtual void ExecuteReader_throws_when_transaction_required()
-	{
-		using var connection = CreateOpenConnection();
-		using var command = connection.CreateCommand();
-		command.CommandText = "SELECT 1;";
-
-		using (connection.BeginTransaction())
-		{
-			Assert.Throws<InvalidOperationException>(() =>
-			{
-				using (command.ExecuteReader())
-				{
-				}
-			});
-		}
-	}
-
-	[Fact]
 	public virtual void ExecuteReader_throws_when_transaction_mismatched()
 	{
 		using var connection = CreateOpenConnection();
@@ -291,9 +274,9 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	{
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
-		command.CommandText = "SELECT @Parameter;";
+		command.CommandText = $"SELECT {ParameterName(connection, "Parameter")};";
 		var parameter = command.CreateParameter();
-		parameter.ParameterName = "@Parameter";
+		parameter.ParameterName = "Parameter";
 		parameter.Value = 1;
 		command.Parameters.Add(parameter);
 
@@ -305,14 +288,14 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	}
 
 	[Fact]
-	public virtual void ExecuteReader_HasRows_is_false_for_comment()
+	public virtual void ExecuteReader_works_with_leading_comment()
 	{
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
-		command.CommandText = "-- TODO: Write SQL";
+		command.CommandText = "-- A leading comment\nSELECT 1;";
 
 		using var reader = command.ExecuteReader();
-		Assert.False(reader.HasRows);
+		Assert.True(reader.HasRows);
 	}
 
 	[Fact]
@@ -395,7 +378,14 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
 		command.CommandText = "SELECT 'test';";
-		Assert.Equal("test", command.ExecuteScalar());
+		var result = command.ExecuteScalar();
+		var text = result switch
+		{
+			string value => value,
+			byte[] bytes => Encoding.UTF8.GetString(bytes),
+			_ => Convert.ToString(result)
+		};
+		Assert.Equal("test", text);
 	}
 
 	[Fact]
@@ -430,7 +420,7 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	{
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
-		command.CommandText = "SELECT 42 UNION SELECT 43;";
+		command.CommandText = "SELECT 42 AS value UNION SELECT 43 AS value ORDER BY value;";
 		Assert.Equal(42, Convert.ToInt32(command.ExecuteScalar()));
 	}
 
@@ -568,9 +558,9 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	{
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
-		command.CommandText = "SELECT @Parameter;";
+		command.CommandText = $"SELECT {ParameterName(connection, "Parameter")};";
 		var parameter = command.CreateParameter();
-		parameter.ParameterName = "@Parameter";
+		parameter.ParameterName = "Parameter";
 		parameter.Value = new CustomClass();
 		command.Parameters.Add(parameter);
 

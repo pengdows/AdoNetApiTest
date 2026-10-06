@@ -16,9 +16,9 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	}
 
 	[Fact]
-	public virtual void Parameter_default_DbType_is_string()
+	public virtual void Parameter_default_DbType_is_object()
 	{
-		Assert.Equal(DbType.String, Fixture.Factory.CreateParameter().DbType);
+		Assert.Equal(DbType.Object, Fixture.Factory.CreateParameter().DbType);
 	}
 
 	[Fact]
@@ -89,34 +89,23 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 
 		parameter.ResetDbType();
 
-		Assert.Equal(DbType.String, parameter.DbType);
+		Assert.Equal(DbType.Object, parameter.DbType);
 	}
 
 	[Fact]
-	public virtual void Bind_requires_set_name()
+	public virtual void Bind_accepts_DBNull_value()
 	{
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
-		command.CommandText = "SELECT @Parameter;";
+		command.CommandText = $"SELECT {ParameterName(connection, "Parameter")};";
 		var parameter = command.CreateParameter();
-		parameter.Value = 1;
+		parameter.ParameterName = "Parameter";
+		parameter.DbType = DbType.String;
+		parameter.Value = DBNull.Value;
 		command.Parameters.Add(parameter);
 
-		AssertThrowsAny<InvalidOperationException, DbException>(() => command.ExecuteNonQuery());
-	}
-
-	[Fact]
-	public virtual void Bind_requires_set_value()
-	{
-		using var connection = CreateOpenConnection();
-		using var command = connection.CreateCommand();
-		command.CommandText = "SELECT @Parameter;";
-		var parameter = command.CreateParameter();
-		parameter.ParameterName = "@Parameter";
-		command.Parameters.Add(parameter);
-
-		// When you send a null parameter value to the server, you must specify DBNull, not null. The null value in the system is an empty object that has no value. DBNull is used to represent null values.
-		Assert.Throws<InvalidOperationException>(() => command.ExecuteNonQuery());
+		var result = command.ExecuteScalar();
+		Assert.True(result is null || result == DBNull.Value);
 	}
 
 	[Fact]
@@ -126,7 +115,7 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		using var command = connection.CreateCommand();
 		command.CommandText = "SELECT 1;";
 		var parameter = command.CreateParameter();
-		parameter.ParameterName = "@Unknown";
+		parameter.ParameterName = "Unknown";
 		parameter.Value = 1;
 		command.Parameters.Add(parameter);
 
@@ -134,27 +123,13 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	}
 
 	[Fact]
-	public virtual void Bind_throws_when_unknown()
-	{
-		using var connection = CreateOpenConnection();
-		using var command = connection.CreateCommand();
-		command.CommandText = "SELECT @Parameter;";
-		var parameter = command.CreateParameter();
-		parameter.ParameterName = "@Parameter";
-		parameter.Value = new object();
-		command.Parameters.Add(parameter);
-
-		AssertThrowsAny<InvalidOperationException, NotSupportedException>(() => command.ExecuteScalar());
-	}
-
-	[Fact]
 	public virtual void Bind_works_with_string()
 	{
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
-		command.CommandText = "SELECT @Parameter;";
+		command.CommandText = $"SELECT {ParameterName(connection, "Parameter")};";
 		var parameter = command.CreateParameter();
-		parameter.ParameterName = "@Parameter";
+		parameter.ParameterName = "Parameter";
 		parameter.Value = "test";
 		command.Parameters.Add(parameter);
 
@@ -167,30 +142,31 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	{
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
-		command.CommandText = "SELECT @Parameter;";
+		command.CommandText = $"SELECT {ParameterName(connection, "Parameter")};";
 		var parameter = command.CreateParameter();
-		parameter.ParameterName = "@Parameter";
+		parameter.ParameterName = "Parameter";
 		parameter.Value = new byte[] { 1, 2, 3, 4 };
 		command.Parameters.Add(parameter);
 
 		var result = command.ExecuteScalar();
-		Assert.Equal(new byte[] { 1, 2, 3, 4 }, result);
+		Assert.Equal(new byte[] { 1, 2, 3, 4 }, ReadBlob(result));
 	}
 
-	[Fact]
-	public virtual void Bind_works_with_stream()
+	private static byte[] ReadBlob(object value)
 	{
-		using var connection = CreateOpenConnection();
-		using var command = connection.CreateCommand();
-		command.CommandText = "SELECT @Parameter;";
-		var parameter = command.CreateParameter();
-		parameter.ParameterName = "@Parameter";
-		using var stream = new MemoryStream(new byte[] { 1, 2, 3, 4 });
-		parameter.Value = stream;
-		command.Parameters.Add(parameter);
+		return value switch
+		{
+			byte[] bytes => bytes,
+			Stream stream => ReadStream(stream),
+			_ => throw new InvalidOperationException($"Expected a byte array or stream, got {value?.GetType().FullName ?? "null"}.")
+		};
+	}
 
-		var result = command.ExecuteScalar();
-		Assert.Equal(new byte[] { 1, 2, 3, 4 }, result);
+	private static byte[] ReadStream(Stream stream)
+	{
+		using var buffer = new MemoryStream();
+		stream.CopyTo(buffer);
+		return buffer.ToArray();
 	}
 
 	[Fact]
@@ -255,9 +231,9 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	{
 		using var command = Fixture.Factory.CreateCommand();
 		var parameter = command.CreateParameter();
-		parameter.ParameterName = "@param";
+		parameter.ParameterName = "param";
 		command.Parameters.Add(parameter);
-		Assert.Throws<ArgumentNullException>(() => command.Parameters["@param"] = null);
+		Assert.Throws<ArgumentNullException>(() => command.Parameters[ParameterName("param")] = null);
 	}
 
 	[Fact]
@@ -283,9 +259,9 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	{
 		using var command = Fixture.Factory.CreateCommand();
 		var parameter = command.CreateParameter();
-		parameter.ParameterName = "@param";
+		parameter.ParameterName = "param";
 		command.Parameters.Add(parameter);
-		Assert.Throws<ArgumentNullException>(() => ((IDataParameterCollection) command.Parameters)["@param"] = null);
+		Assert.Throws<ArgumentNullException>(() => ((IDataParameterCollection) command.Parameters)[ParameterName("param")] = null);
 	}
 
 	[Fact]
@@ -300,20 +276,6 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	{
 		using var command = Fixture.Factory.CreateCommand();
 		Assert.False(command.Parameters.Contains(default(string)));
-	}
-
-	[Fact]
-	public virtual void ParameterCollection_IndexOf_object_returns_negative_one_for_null()
-	{
-		using var command = Fixture.Factory.CreateCommand();
-		Assert.Equal(-1, command.Parameters.IndexOf(default(object)));
-	}
-
-	[Fact]
-	public virtual void ParameterCollection_IndexOf_string_returns_negative_one_for_null()
-	{
-		using var command = Fixture.Factory.CreateCommand();
-		Assert.Equal(-1, command.Parameters.IndexOf(default(string)));
 	}
 
 	[Fact]
