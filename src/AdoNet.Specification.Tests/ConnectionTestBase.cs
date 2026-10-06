@@ -81,6 +81,11 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.Equal(string.Empty, connection.DataSource);
 	}
 
+	/// <summary>
+	/// An open connection must expose a non-empty server-version value; this is
+	/// metadata required by consumers that select provider-specific SQL behavior.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.serverversion.
+	/// </summary>
 	[Fact]
 	public virtual void ServerVersion_returns_value()
 	{
@@ -230,6 +235,10 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		connection.Dispose();
 	}
 
+	/// <summary>
+	/// Disposal raises the standard DbConnection Disposed event exactly once.
+	/// See https://learn.microsoft.com/dotnet/api/system.componentmodel.component.disposed.
+	/// </summary>
 	[Fact]
 	public virtual void Dispose_raises_Disposed()
 	{
@@ -241,6 +250,10 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	}
 
 #if NETSTANDARD2_1_OR_GREATER
+	/// <summary>
+	/// DisposeAsync follows the same component-disposal event contract as Dispose.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.disposeasync.
+	/// </summary>
 	[Fact]
 	public virtual async Task DisposeAsync_raises_Disposed()
 	{

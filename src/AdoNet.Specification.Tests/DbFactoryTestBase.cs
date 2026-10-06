@@ -55,7 +55,13 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 	protected virtual DbConnectionStringBuilder CreateConnectionStringBuilder()
 		=> Fixture.Factory.CreateConnectionStringBuilder();
 
-	/// <summary>Gets the named-parameter marker advertised by DataSourceInformation.</summary>
+	/// <summary>
+	/// Gets the named-parameter marker advertised by DataSourceInformation.
+	/// This follows <see cref="DbMetaDataColumnNames.ParameterMarkerFormat"/>
+	/// from <see cref="DbConnection.GetSchema()"/> rather than assuming '@'.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.getschema
+	/// and https://learn.microsoft.com/dotnet/api/system.data.common.dbmetadatacolumnnames.parametermarkerformat.
+	/// </summary>
 	protected virtual string ParameterMarker
 	{
 		get
@@ -93,7 +99,7 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 				return "?";
 		}
 
-		return markerFormat[..placeholderIndex];
+		return markerFormat.Substring(0, placeholderIndex);
 	}
 
 	protected virtual string ConnectionString

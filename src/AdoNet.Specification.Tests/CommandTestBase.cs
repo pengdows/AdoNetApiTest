@@ -239,6 +239,12 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.ThrowsAny<DbException>(() => command.ExecuteReader());
 	}
 
+	/// <summary>
+	/// DbCommand requires an explicitly associated transaction when the connection
+	/// has an active local transaction; this protects callers from accidentally
+	/// executing outside the transaction they opened.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.transaction.
+	/// </summary>
 	[Fact]
 	public virtual void ExecuteReader_throws_when_transaction_required()
 	{
@@ -305,6 +311,11 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 			Assert.Equal(1L, scalar);
 	}
 
+	/// <summary>
+	/// A command with a leading comment still contains an executable statement,
+	/// so ExecuteReader must expose that statement's result set.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executereader.
+	/// </summary>
 	[Fact]
 	public virtual void ExecuteReader_works_with_leading_comment()
 	{
@@ -316,22 +327,20 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.True(reader.HasRows);
 	}
 
+	/// <summary>
+	/// A comment-only command is distinct from a command with a leading comment:
+	/// it contains no executable statement and therefore has no rows.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executereader.
+	/// </summary>
 	[Fact]
-	public virtual void ExecuteReader_comment_only_is_empty_or_rejected()
+	public virtual void ExecuteReader_HasRows_is_false_for_comment()
 	{
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
-		command.CommandText = "-- A comment-only command";
+		command.CommandText = "-- TODO: Write SQL";
 
-		try
-		{
-			using var reader = command.ExecuteReader();
-			Assert.False(reader.HasRows);
-		}
-		catch (DbException)
-		{
-			// Providers may reject a command that contains no executable statement.
-		}
+		using var reader = command.ExecuteReader();
+		Assert.False(reader.HasRows);
 	}
 
 	[Fact]
@@ -408,6 +417,12 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 			Assert.Equal(3.14m, result);
 	}
 
+	/// <summary>
+	/// ExecuteScalar returns an object, and providers may represent textual data as
+	/// a string or UTF-8 bytes. The contract tested here is the returned text value,
+	/// not an incidental provider CLR type.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executescalar.
+	/// </summary>
 	[Fact]
 	public virtual void ExecuteScalar_returns_string_when_text()
 	{
@@ -451,6 +466,12 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.Equal(42, Convert.ToInt32(command.ExecuteScalar()));
 	}
 
+	/// <summary>
+	/// Without ORDER BY, SQL does not define row order. The ordered UNION makes the
+	/// first-row assertion test ExecuteScalar's first-column/first-row contract
+	/// instead of relying on accidental query-plan order.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executescalar.
+	/// </summary>
 	[Fact]
 	public virtual void ExecuteScalar_returns_first_when_multiple_rows()
 	{

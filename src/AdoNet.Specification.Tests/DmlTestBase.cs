@@ -9,6 +9,7 @@ namespace AdoNet.Specification.Tests;
 /// This covers the behavior relied upon by optimistic concurrency and write
 /// success detection in consumers such as pengdows.crud. It is deliberately
 /// separate from the existing SELECT-only ExecuteNonQuery test.
+/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executenonquery.
 /// </summary>
 public abstract class DmlTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	where TFixture : class, IDbFactoryFixture, IDmlFixture
@@ -21,6 +22,8 @@ public abstract class DmlTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// <summary>
 	/// ADO.NET requires INSERT, UPDATE, and DELETE to return their affected-row
 	/// count, including zero when the predicate matches no rows.
+	/// This is the contract consumed by optimistic-concurrency code: a zero count
+	/// means that no row matched the write predicate.
 	/// </summary>
 	[Fact]
 	public virtual void ExecuteNonQuery_returns_affected_rows_for_DML()
@@ -47,6 +50,7 @@ public abstract class DmlTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// ADO.NET requires ExecuteNonQuery to return -1 for a result-producing
 	/// statement such as SELECT; the number of returned rows is not an affected
 	/// row count.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executenonquery.
 	/// </summary>
 	[Fact]
 	public virtual void ExecuteNonQuery_returns_negative_one_for_result_producing_statement()
