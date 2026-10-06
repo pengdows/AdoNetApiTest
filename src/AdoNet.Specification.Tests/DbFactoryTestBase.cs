@@ -57,10 +57,10 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 
 	/// <summary>
 	/// Matches the provider-neutral behavior used by pengdows.crud: providers that
-	/// do not advertise a named-parameter format use the positional placeholder
-	/// '?'; named providers receive their advertised marker plus the logical name.
-	/// An unusable DataSourceInformation schema is allowed to fail rather than being
-	/// treated as evidence of positional support.
+	/// explicitly advertise the positional format '?' use that placeholder; named
+	/// providers receive their advertised marker plus the logical name. Missing or
+	/// unusable DataSourceInformation is allowed to fail rather than being treated as
+	/// evidence of positional support.
 	/// The logical <see cref="DbParameter.ParameterName"/> remains independent of
 	/// this SQL representation.
 	/// See https://learn.microsoft.com/dotnet/framework/data/adonet/configuring-parameters-and-parameter-data-types.
@@ -73,12 +73,15 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 
 		var markerFormat = schema.Rows[0][DbMetaDataColumnNames.ParameterMarkerFormat] as string;
 		if (string.IsNullOrEmpty(markerFormat))
+			throw new InvalidOperationException("DataSourceInformation did not advertise ParameterMarkerFormat.");
+
+		if (markerFormat == "?")
 			return "?";
 
 		const string placeholder = "{0}";
 		var placeholderIndex = markerFormat.IndexOf(placeholder, StringComparison.Ordinal);
 		if (placeholderIndex < 0)
-			return "?";
+			throw new InvalidOperationException($"Invalid ParameterMarkerFormat '{markerFormat}'.");
 
 		var parameterName = name.TrimStart('@', ':', '$', '?');
 		var parameterMarker = markerFormat.Substring(0, placeholderIndex);
