@@ -32,15 +32,14 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	}
 
 	/// <summary>
-	/// Retained for compatibility with the original suite. DbProviderFactory does
-	/// not require every provider to implement a command builder; the capability
-	/// agreement is tested above instead.
+	/// Retained as an implementation-comparison diagnostic. Providers that do not
+	/// support this optional API can override the test; the capability agreement is
+	/// tested separately above.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.createcommandbuilder.
 	/// </summary>
-	[Fact(Skip = "ADO.NET does not require every provider to implement DbCommandBuilder.")]
+	[Fact]
 	public virtual void DbProviderFactory_CreateCommandBuilder_is_not_null()
-	{
-	}
+		=> Assert.NotNull(Fixture.Factory.CreateCommandBuilder());
 
 	[Fact]
 	public virtual void DbProviderFactory_CreateConnection_is_not_null() => Assert.NotNull(Fixture.Factory.CreateConnection());
@@ -67,14 +66,14 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	}
 
 	/// <summary>
-	/// Retained for compatibility with the original suite. DataAdapter support is
-	/// optional and must be checked through the factory capability, not nullability.
+	/// Retained as an implementation-comparison diagnostic. Providers that do not
+	/// support this optional API can override the test; the capability agreement is
+	/// tested separately above.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.createdataadapter.
 	/// </summary>
-	[Fact(Skip = "ADO.NET does not require every provider to implement DbDataAdapter.")]
+	[Fact]
 	public virtual void DbProviderFactory_CreateDataAdapter_is_not_null()
-	{
-	}
+		=> Assert.NotNull(Fixture.Factory.CreateDataAdapter());
 
 	[Fact]
 	public virtual void DbProviderFactory_CreateParameter_is_not_null() => Assert.NotNull(Fixture.Factory.CreateParameter());
@@ -83,32 +82,39 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	public virtual void DbProviderFactory_CanCreateDataSourceEnumerator_is_accurate() => Assert.Equal(Fixture.Factory.CanCreateDataSourceEnumerator, Fixture.Factory.CreateDataSourceEnumerator() is object);
 
 	/// <summary>
-	/// The old test assumed that every provider lacks a data-source enumerator;
-	/// provider capability is explicitly allowed to vary.
+	/// Retained as an implementation-comparison diagnostic for the historical
+	/// provider set. Providers with a data-source enumerator can override it.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.createdatasourceenumerator.
 	/// </summary>
-	[Fact(Skip = "Data-source enumeration capability is provider-specific.")]
+	[Fact]
 	public virtual void DbProviderFactory_CreateDataSourceEnumerator_is_null()
-	{
-	}
+		=> Assert.Null(Fixture.Factory.CreateDataSourceEnumerator());
 
-	[Fact(Skip = "Data-source enumeration capability is provider-specific.")]
+	[Fact]
 	public virtual void DbProviderFactory_CanCreateDataSourceEnumerator_is_false()
-	{
-	}
+		=> Assert.False(Fixture.Factory.CanCreateDataSourceEnumerator);
 
 	/// <summary>
-	/// These original tests required optional factory capabilities from every
-	/// provider. They are retained as documented skips; the active capability
-	/// agreement test above is the provider-neutral contract.
+	/// These original tests remain active so the suite continues to compare
+	/// implementations. Providers with different optional-capability support can
+	/// override them; the active capability agreement test above is also reported.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.cancreatedatasourceenumerator.
 	/// </summary>
-	[Fact(Skip = "Command-builder support is optional and provider-specific.")]
+	#if NETSTANDARD2_0
+	[Fact]
 	public virtual void DbProviderFactory_CanCreateCommandBuilder_is_true()
-	{
-	}
+		=> throw Xunit.Sdk.SkipException.ForSkip("Not supported on this TargetFramework");
 
-	[Fact(Skip = "Data-adapter support is optional and provider-specific.")]
+	[Fact]
 	public virtual void DbProviderFactory_CanCreateDataAdapter_is_true()
-	{
-	}
+		=> throw Xunit.Sdk.SkipException.ForSkip("Not supported on this TargetFramework");
+	#else
+	[Fact]
+	public virtual void DbProviderFactory_CanCreateCommandBuilder_is_true()
+		=> Assert.True(Fixture.Factory.CanCreateCommandBuilder);
+
+	[Fact]
+	public virtual void DbProviderFactory_CanCreateDataAdapter_is_true()
+		=> Assert.True(Fixture.Factory.CanCreateDataAdapter);
+	#endif
 }
