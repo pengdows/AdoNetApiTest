@@ -18,12 +18,14 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// <summary>
 	/// The original assertion required <see cref="DbType.String"/>. ADO.NET exposes
 	/// <see cref="DbParameter.DbType"/>, but does not prescribe a provider-neutral
-	/// default value. The old assertion was therefore not a valid shared contract.
+	/// default value. This remains an active implementation-comparison diagnostic;
+	/// providers with a different default can override it.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbparameter.dbtype.
 	/// </summary>
-	[Fact(Skip = "ADO.NET does not prescribe a provider-neutral default DbType.")]
+	[Fact]
 	public virtual void Parameter_default_DbType_is_string()
 	{
+		Assert.Equal(DbType.String, Fixture.Factory.CreateParameter().DbType);
 	}
 
 	[Fact]
@@ -88,22 +90,37 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 
 	/// <summary>
 	/// ResetDbType is part of the API, but its provider-specific reset target is not
-	/// defined by the ADO.NET contract. The former String/Object equality assertion
-	/// was consequently invalid as a cross-provider test.
+	/// defined by the ADO.NET contract. This remains an active implementation-
+	/// comparison diagnostic; providers with a different reset target can override it.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbparameter.resetdbtype.
 	/// </summary>
-	[Fact(Skip = "ADO.NET does not define the provider's ResetDbType target value.")]
+	[Fact]
 	public virtual void ResetDbType_works()
 	{
+		var parameter = Fixture.Factory.CreateParameter();
+		parameter.DbType = DbType.Int64;
+
+		parameter.ResetDbType();
+
+		Assert.Equal(DbType.String, parameter.DbType);
 	}
 
 	/// <summary>
 	/// Named versus positional parameter requirements are provider-specific. The
-	/// original test hard-coded a named marker and therefore was not portable.
+	/// SQL marker is discovered separately; providers with different parameter-name
+	/// requirements can override this implementation-comparison diagnostic.
 	/// </summary>
-	[Fact(Skip = "Parameter-name requirements are provider-specific, not a shared ADO.NET contract.")]
+	[Fact]
 	public virtual void Bind_requires_set_name()
 	{
+		using var connection = CreateOpenConnection();
+		using var command = connection.CreateCommand();
+		command.CommandText = $"SELECT {MakeParameterName(connection, "Parameter")};";
+		var parameter = command.CreateParameter();
+		parameter.Value = 1;
+		command.Parameters.Add(parameter);
+
+		AssertThrowsAny<InvalidOperationException, DbException>(() => command.ExecuteNonQuery());
 	}
 
 	/// <summary>
@@ -116,7 +133,7 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	{
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
-		command.CommandText = $"SELECT {ParameterName(connection, "Parameter")};";
+		command.CommandText = $"SELECT {MakeParameterName(connection, "Parameter")};";
 		var parameter = command.CreateParameter();
 		parameter.ParameterName = "Parameter";
 		parameter.DbType = DbType.String;
@@ -131,13 +148,27 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// The original test required null to be rejected. ADO.NET permits a provider to
 	/// interpret null as its parameter-null representation, so that rejection is not
 	/// a provider-neutral contract; DBNull.Value is the portable sentinel instead.
+	/// This remains an active implementation-comparison diagnostic.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbparameter.value.
 	/// </summary>
-	[Fact(Skip = "ADO.NET does not require a null parameter value to be rejected.")]
+	[Fact]
 	public virtual void Bind_requires_set_value()
 	{
+		using var connection = CreateOpenConnection();
+		using var command = connection.CreateCommand();
+		command.CommandText = $"SELECT {MakeParameterName(connection, "Parameter")};";
+		var parameter = command.CreateParameter();
+		parameter.ParameterName = "Parameter";
+		command.Parameters.Add(parameter);
+
+		Assert.Throws<InvalidOperationException>(() => command.ExecuteNonQuery());
 	}
 
+	/// <summary>
+	/// An unused parameter is tested independently of SQL marker syntax; the
+	/// parameter collection contains the logical name only.
+	/// See https://learn.microsoft.com/dotnet/framework/data/adonet/configuring-parameters-and-parameter-data-types.
+	/// </summary>
 	[Fact]
 	public virtual void Bind_is_noop_on_unknown_parameter()
 	{
@@ -154,12 +185,22 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 
 	/// <summary>
 	/// Conversion of an arbitrary CLR object that a provider does not understand is
-	/// provider-specific. The original exception assertion was not a shared contract.
+	/// provider-specific. This remains an active implementation-comparison
+	/// diagnostic; providers with different conversion behavior can override it.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbparameter.value.
 	/// </summary>
-	[Fact(Skip = "Unknown CLR parameter-value conversion is provider-specific.")]
+	[Fact]
 	public virtual void Bind_throws_when_unknown()
 	{
+		using var connection = CreateOpenConnection();
+		using var command = connection.CreateCommand();
+		command.CommandText = $"SELECT {MakeParameterName(connection, "Parameter")};";
+		var parameter = command.CreateParameter();
+		parameter.ParameterName = "Parameter";
+		parameter.Value = new object();
+		command.Parameters.Add(parameter);
+
+		AssertThrowsAny<InvalidOperationException, NotSupportedException>(() => command.ExecuteScalar());
 	}
 
 	/// <summary>
@@ -172,7 +213,7 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	{
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
-		command.CommandText = $"SELECT {ParameterName(connection, "Parameter")};";
+		command.CommandText = $"SELECT {MakeParameterName(connection, "Parameter")};";
 		var parameter = command.CreateParameter();
 		parameter.ParameterName = "Parameter";
 		parameter.Value = "test";
@@ -193,7 +234,7 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	{
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
-		command.CommandText = $"SELECT {ParameterName(connection, "Parameter")};";
+		command.CommandText = $"SELECT {MakeParameterName(connection, "Parameter")};";
 		var parameter = command.CreateParameter();
 		parameter.ParameterName = "Parameter";
 		parameter.Value = new byte[] { 1, 2, 3, 4 };
@@ -207,11 +248,23 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// Stream-valued parameters are not required by the provider-neutral ADO.NET
 	/// contract; the original test incorrectly treated this optional behavior as
 	/// universal. Byte-array binding is covered separately because it is the common
-	/// binary value representation.
+	/// binary value representation. This remains an active diagnostic; providers
+	/// that do not support stream values can override it.
 	/// </summary>
-	[Fact(Skip = "Stream parameter values are provider-specific.")]
+	[Fact]
 	public virtual void Bind_works_with_stream()
 	{
+		using var connection = CreateOpenConnection();
+		using var command = connection.CreateCommand();
+		command.CommandText = $"SELECT {MakeParameterName(connection, "Parameter")};";
+		var parameter = command.CreateParameter();
+		parameter.ParameterName = "Parameter";
+		using var stream = new MemoryStream(new byte[] { 1, 2, 3, 4 });
+		parameter.Value = stream;
+		command.Parameters.Add(parameter);
+
+		var result = command.ExecuteScalar();
+		Assert.Equal(new byte[] { 1, 2, 3, 4 }, ReadBlob(result));
 	}
 
 	private static byte[] ReadBlob(object value)
@@ -288,6 +341,11 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.Throws<ArgumentNullException>(() => command.Parameters.Insert(0, default));
 	}
 
+	/// <summary>
+	/// The string indexer uses the logical parameter name, independently of whether
+	/// SQL uses '@', ':', '$', or positional '?'.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.idataparametercollection.item.
+	/// </summary>
 	[Fact]
 	public virtual void ParameterCollection_string_indexer_setter_throws_for_null()
 	{
@@ -295,7 +353,7 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		var parameter = command.CreateParameter();
 		parameter.ParameterName = "param";
 		command.Parameters.Add(parameter);
-		Assert.Throws<ArgumentNullException>(() => command.Parameters[ParameterName("param")] = null);
+		Assert.Throws<ArgumentNullException>(() => command.Parameters["param"] = null);
 	}
 
 	[Fact]
@@ -316,6 +374,11 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.Throws<ArgumentNullException>(() => ((IList) command.Parameters)[0] = null);
 	}
 
+	/// <summary>
+	/// IDataParameterCollection also indexes by the logical parameter name; the SQL
+	/// marker is not part of the collection key.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.idataparametercollection.item.
+	/// </summary>
 	[Fact]
 	public virtual void ParameterCollection_IDataParameterCollection_indexer_setter_throws_for_null()
 	{
@@ -323,7 +386,7 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		var parameter = command.CreateParameter();
 		parameter.ParameterName = "param";
 		command.Parameters.Add(parameter);
-		Assert.Throws<ArgumentNullException>(() => ((IDataParameterCollection) command.Parameters)[ParameterName("param")] = null);
+		Assert.Throws<ArgumentNullException>(() => ((IDataParameterCollection) command.Parameters)["param"] = null);
 	}
 
 	[Fact]
@@ -342,17 +405,22 @@ public abstract class ParameterTestBase<TFixture> : DbFactoryTestBase<TFixture>
 
 	/// <summary>
 	/// IDataParameterCollection requires Contains, but does not impose one universal
-	/// null-argument policy for IndexOf across provider implementations.
+	/// null-argument policy for IndexOf across provider implementations. This remains
+	/// an active diagnostic; providers with a different policy can override it.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.idataparametercollection.indexof.
 	/// </summary>
-	[Fact(Skip = "Null IndexOf argument handling is provider-specific.")]
+	[Fact]
 	public virtual void ParameterCollection_IndexOf_object_returns_negative_one_for_null()
 	{
+		using var command = Fixture.Factory.CreateCommand();
+		Assert.Equal(-1, command.Parameters.IndexOf(default(object)));
 	}
 
-	[Fact(Skip = "Null IndexOf argument handling is provider-specific.")]
+	[Fact]
 	public virtual void ParameterCollection_IndexOf_string_returns_negative_one_for_null()
 	{
+		using var command = Fixture.Factory.CreateCommand();
+		Assert.Equal(-1, command.Parameters.IndexOf(default(string)));
 	}
 
 	[Fact]

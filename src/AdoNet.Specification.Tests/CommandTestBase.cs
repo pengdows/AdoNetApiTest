@@ -293,12 +293,17 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.ThrowsAny<InvalidOperationException>(() => command.ExecuteReader());
 	}
 
+	/// <summary>
+	/// Parameter binding uses the provider's advertised SQL placeholder while the
+	/// DbParameter keeps only its logical name; no '@' prefix is assumed.
+	/// See https://learn.microsoft.com/dotnet/framework/data/adonet/configuring-parameters-and-parameter-data-types.
+	/// </summary>
 	[Fact]
 	public virtual void ExecuteReader_binds_parameters()
 	{
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
-		command.CommandText = $"SELECT {ParameterName(connection, "Parameter")};";
+		command.CommandText = $"SELECT {MakeParameterName(connection, "Parameter")};";
 		var parameter = command.CreateParameter();
 		parameter.ParameterName = "Parameter";
 		parameter.Value = 1;
@@ -610,12 +615,17 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.True(task.IsCanceled);
 	}
 
+	/// <summary>
+	/// An unsupported CLR parameter value is still tested using the provider's
+	/// parameter syntax rather than a hardcoded SQL Server-style marker.
+	/// See https://learn.microsoft.com/dotnet/framework/data/adonet/configuring-parameters-and-parameter-data-types.
+	/// </summary>
 	[Fact]
 	public virtual void Execute_throws_for_unknown_ParameterValue_type()
 	{
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
-		command.CommandText = $"SELECT {ParameterName(connection, "Parameter")};";
+		command.CommandText = $"SELECT {MakeParameterName(connection, "Parameter")};";
 		var parameter = command.CreateParameter();
 		parameter.ParameterName = "Parameter";
 		parameter.Value = new CustomClass();

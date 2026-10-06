@@ -56,50 +56,56 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 		=> Fixture.Factory.CreateConnectionStringBuilder();
 
 	/// <summary>
-	/// Gets the named-parameter marker advertised by DataSourceInformation.
-	/// This follows <see cref="DbMetaDataColumnNames.ParameterMarkerFormat"/>
-	/// from <see cref="DbConnection.GetSchema()"/> rather than assuming '@'.
-	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.getschema
-	/// and https://learn.microsoft.com/dotnet/api/system.data.common.dbmetadatacolumnnames.parametermarkerformat.
+	/// Matches the provider-neutral behavior used by pengdows.crud: providers that
+	/// do not advertise a named-parameter format use the positional placeholder
+	/// '?'; named providers receive their advertised marker plus the logical name.
+	/// The logical <see cref="DbParameter.ParameterName"/> remains independent of
+	/// this SQL representation.
+	/// See https://learn.microsoft.com/dotnet/framework/data/adonet/configuring-parameters-and-parameter-data-types.
 	/// </summary>
-	protected virtual string ParameterMarker
+	protected virtual string MakeParameterName(DbConnection connection, string name)
 	{
-		get
+		DataTable schema;
+		try
 		{
-			using var connection = CreateOpenConnection();
-			return GetParameterMarker(connection);
+			schema = connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
 		}
-	}
-
-	protected string ParameterName(DbConnection connection, string name) => GetParameterMarker(connection) + name;
-
-	protected string ParameterName(string name) => ParameterMarker + name;
-
-	private static string GetParameterMarker(DbConnection connection)
-	{
-		var schema = connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
+		catch (ArgumentException)
+		{
+			// A provider that cannot construct its metadata table cannot advertise
+			// named parameters. Keep the SQL usable as a positional probe; the
+			// provider's GetSchema test still reports the metadata defect.
+			return "?";
+		}
 		if (schema.Rows.Count == 0)
 			throw new InvalidOperationException("DataSourceInformation did not return a row.");
 
 		var markerFormat = schema.Rows[0][DbMetaDataColumnNames.ParameterMarkerFormat] as string;
 		if (string.IsNullOrEmpty(markerFormat))
-			throw Xunit.Sdk.SkipException.ForSkip("Provider does not advertise a named parameter marker.");
+			return "?";
 
 		const string placeholder = "{0}";
-		var placeholderIndex = markerFormat.IndexOf(placeholder, StringComparison.Ordinal);
-		if (placeholderIndex < 0)
-			throw new InvalidOperationException($"Invalid ParameterMarkerFormat '{markerFormat}'.");
+		if (markerFormat.IndexOf(placeholder, StringComparison.Ordinal) < 0)
+			return "?";
 
+		var parameterName = name.TrimStart('@', ':', '$', '?');
 		if (markerFormat == placeholder)
 		{
 			var markerPattern = schema.Rows[0][DbMetaDataColumnNames.ParameterMarkerPattern] as string;
-			if (markerPattern?.IndexOf('@') >= 0)
-				return "@";
 			if (markerPattern?.IndexOf('?') >= 0)
 				return "?";
+
+			if (markerPattern?.IndexOf('@') >= 0)
+				return "@" + parameterName;
+
+			if (markerPattern?.IndexOf(':') >= 0)
+				return ":" + parameterName;
+
+			if (markerPattern?.IndexOf('$') >= 0)
+				return "$" + parameterName;
 		}
 
-		return markerFormat.Substring(0, placeholderIndex);
+		return markerFormat.Replace(placeholder, parameterName);
 	}
 
 	protected virtual string ConnectionString
