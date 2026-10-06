@@ -66,7 +66,12 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 	/// evidence of positional support.
 	/// The logical <see cref="DbParameter.ParameterName"/> remains independent of
 	/// this SQL representation.
+	/// The positional-versus-named decision follows the ADO.NET
+	/// <see cref="DbMetaDataColumnNames.ParameterMarkerFormat"/> contract; the
+	/// fallback marker is checked against <see cref="DbMetaDataColumnNames.ParameterMarkerPattern"/>.
 	/// See https://learn.microsoft.com/dotnet/framework/data/adonet/configuring-parameters-and-parameter-data-types.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbmetadatacolumnnames.parametermarkerformat.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbmetadatacolumnnames.parametermarkerpattern.
 	/// </summary>
 	protected virtual string MakeParameterName(DbConnection connection, string name)
 	{
@@ -134,6 +139,8 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 	/// <summary>
 	/// Formats a provider parameter from its logical name using the same named-versus-
 	/// positional decision as <see cref="MakeParameterName(DbConnection, string)"/>.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbmetadatacolumnnames.parametermarkerformat.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbmetadatacolumnnames.parametermarkerpattern.
 	/// </summary>
 	protected virtual string MakeParameterName(DbConnection connection, DbParameter parameter)
 		=> MakeParameterName(connection, parameter.ParameterName);
