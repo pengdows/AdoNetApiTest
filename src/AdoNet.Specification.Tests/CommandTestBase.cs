@@ -240,6 +240,24 @@ public abstract class CommandTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	}
 
 	[Fact]
+	public virtual void ExecuteReader_throws_when_transaction_required()
+	{
+		using var connection = CreateOpenConnection();
+		using var command = connection.CreateCommand();
+		command.CommandText = "SELECT 1;";
+
+		using (connection.BeginTransaction())
+		{
+			Assert.Throws<InvalidOperationException>(() =>
+			{
+				using (command.ExecuteReader())
+				{
+				}
+			});
+		}
+	}
+
+	[Fact]
 	public virtual void ExecuteReader_throws_when_transaction_mismatched()
 	{
 		using var connection = CreateOpenConnection();
