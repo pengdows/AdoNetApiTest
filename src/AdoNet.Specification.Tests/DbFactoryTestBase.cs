@@ -59,24 +59,15 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 	/// Matches the provider-neutral behavior used by pengdows.crud: providers that
 	/// do not advertise a named-parameter format use the positional placeholder
 	/// '?'; named providers receive their advertised marker plus the logical name.
+	/// An unusable DataSourceInformation schema is allowed to fail rather than being
+	/// treated as evidence of positional support.
 	/// The logical <see cref="DbParameter.ParameterName"/> remains independent of
 	/// this SQL representation.
 	/// See https://learn.microsoft.com/dotnet/framework/data/adonet/configuring-parameters-and-parameter-data-types.
 	/// </summary>
 	protected virtual string MakeParameterName(DbConnection connection, string name)
 	{
-		DataTable schema;
-		try
-		{
-			schema = connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
-		}
-		catch (ArgumentException)
-		{
-			// A provider that cannot construct its metadata table cannot advertise
-			// named parameters. Keep the SQL usable as a positional probe; the
-			// provider's GetSchema test still reports the metadata defect.
-			return "?";
-		}
+		var schema = connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
 		if (schema.Rows.Count == 0)
 			throw new InvalidOperationException("DataSourceInformation did not return a row.");
 
