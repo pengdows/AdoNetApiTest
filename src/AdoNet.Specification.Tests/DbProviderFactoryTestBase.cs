@@ -22,7 +22,7 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.cancreatecommandbuilder.
 	/// </summary>
 	// Contract: OPTIONAL CAPABILITY TEST — providers that do not expose command builders are explicitly skipped; https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.cancreatecommandbuilder
-	[DiagnosticFact]
+	[Fact]
 	public virtual void DbProviderFactory_CreateCommandBuilder_matches_capability()
 	{
 		DbCommandBuilder commandBuilder;
@@ -40,7 +40,7 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 		if (commandBuilder is null)
 			throw Xunit.Sdk.SkipException.ForSkip("The provider does not expose the optional command-builder capability.");
 #else
-		Assert.Equal(Fixture.Factory.CanCreateCommandBuilder, commandBuilder is not null);
+		AssertOptionalFactoryObject(Fixture.Factory.CanCreateCommandBuilder, commandBuilder is not null, "command builder");
 #endif
 	}
 
@@ -50,7 +50,7 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.createcommandbuilder.
 	/// </summary>
 	// Contract: WAS INVALID CONTRACT TEST (required command builder) — NOW VALID OPTIONAL CAPABILITY-AGREEMENT TEST; https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.cancreatecommandbuilder
-	[DiagnosticFact]
+	[Fact]
 	#if NETSTANDARD2_0
 	public virtual void DbProviderFactory_CreateCommandBuilder_is_not_null()
 		=> throw Xunit.Sdk.SkipException.ForSkip("CanCreateCommandBuilder is not available on this target framework.");
@@ -73,7 +73,7 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.cancreatedataadapter.
 	/// </summary>
 	// Contract: OPTIONAL CAPABILITY TEST — providers that do not expose data adapters are explicitly skipped; https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.cancreatedataadapter
-	[DiagnosticFact]
+	[Fact]
 	public virtual void DbProviderFactory_CreateDataAdapter_matches_capability()
 	{
 		System.Data.Common.DbDataAdapter dataAdapter;
@@ -91,7 +91,7 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 		if (dataAdapter is null)
 			throw Xunit.Sdk.SkipException.ForSkip("The provider does not expose the optional data-adapter capability.");
 #else
-		Assert.Equal(Fixture.Factory.CanCreateDataAdapter, dataAdapter is not null);
+		AssertOptionalFactoryObject(Fixture.Factory.CanCreateDataAdapter, dataAdapter is not null, "data adapter");
 #endif
 	}
 
@@ -101,7 +101,7 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.createdataadapter.
 	/// </summary>
 	// Contract: WAS INVALID CONTRACT TEST (required data adapter) — NOW VALID OPTIONAL CAPABILITY-AGREEMENT TEST; https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.cancreatedataadapter
-	[DiagnosticFact]
+	[Fact]
 	#if NETSTANDARD2_0
 	public virtual void DbProviderFactory_CreateDataAdapter_is_not_null()
 		=> throw Xunit.Sdk.SkipException.ForSkip("CanCreateDataAdapter is not available on this target framework.");
@@ -134,13 +134,17 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 		catch (NotSupportedException)
 		{
 			Assert.False(Fixture.Factory.CanCreateBatch);
-			return;
+			throw Xunit.Sdk.SkipException.ForSkip("The provider does not implement factory-level batches.");
 		}
 
-		using (batch)
+		if (batch is null)
 		{
-			Assert.Equal(Fixture.Factory.CanCreateBatch, batch is not null);
+			Assert.False(Fixture.Factory.CanCreateBatch, "The provider advertises batch support but returned null.");
+			throw Xunit.Sdk.SkipException.ForSkip("The provider does not implement factory-level batches.");
 		}
+
+		Assert.True(Fixture.Factory.CanCreateBatch, "The provider returned a batch while advertising batch support as unavailable.");
+		batch.Dispose();
 	}
 
 	/// <summary>
@@ -160,10 +164,17 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 		catch (NotSupportedException)
 		{
 			Assert.False(Fixture.Factory.CanCreateBatch);
-			return;
+			throw Xunit.Sdk.SkipException.ForSkip("The provider does not implement factory-level batch commands.");
 		}
 
-		Assert.Equal(Fixture.Factory.CanCreateBatch, batchCommand is not null);
+		if (batchCommand is null)
+		{
+			Assert.False(Fixture.Factory.CanCreateBatch, "The provider advertises batch-command support but returned null.");
+			throw Xunit.Sdk.SkipException.ForSkip("The provider does not implement factory-level batch commands.");
+		}
+
+		Assert.True(Fixture.Factory.CanCreateBatch,
+			"The provider returned a batch command while advertising batch support as unavailable.");
 	}
 
 	/// <summary>
@@ -172,8 +183,8 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	/// report NotSupportedException.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.createdatasource.
 	/// </summary>
-	// Contract: COMMON BEHAVIOR TEST — optional modern factory capability; https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.createdatasource
-	[DiagnosticFact]
+	// Contract: OPTIONAL CAPABILITY TEST — unimplemented data sources are skipped; an implemented data source must be usable; https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.createdatasource
+	[Fact]
 	public virtual void DbProviderFactory_CreateDataSource_is_usable_when_supported()
 	{
 		try
@@ -196,7 +207,11 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	/// </summary>
 	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory
 	[Fact]
-	public virtual void DbProviderFactory_CanCreateDataSourceEnumerator_is_accurate() => Assert.Equal(Fixture.Factory.CanCreateDataSourceEnumerator, Fixture.Factory.CreateDataSourceEnumerator() is object);
+	public virtual void DbProviderFactory_CanCreateDataSourceEnumerator_is_accurate()
+	{
+		var enumerator = Fixture.Factory.CreateDataSourceEnumerator();
+		AssertOptionalFactoryObject(Fixture.Factory.CanCreateDataSourceEnumerator, enumerator is not null, "data-source enumerator");
+	}
 
 	/// <summary>
 	/// Retained under its historical name, but now checks the optional enumerator
@@ -204,9 +219,9 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.createdatasourceenumerator.
 	/// </summary>
 	// Contract: WAS INVALID CONTRACT TEST (required data-source enumerator) — NOW VALID OPTIONAL CAPABILITY-AGREEMENT TEST; https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.cancreatedatasourceenumerator
-	[DiagnosticFact]
+	[Fact]
 	public virtual void DbProviderFactory_CreateDataSourceEnumerator_is_null()
-		=> Assert.Equal(Fixture.Factory.CanCreateDataSourceEnumerator, Fixture.Factory.CreateDataSourceEnumerator() is not null);
+		=> AssertOptionalFactoryObject(Fixture.Factory.CanCreateDataSourceEnumerator, Fixture.Factory.CreateDataSourceEnumerator() is not null, "data-source enumerator");
 
 	/// <summary>
 	/// Retained under its historical name, but now checks the optional enumerator
@@ -214,25 +229,23 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.cancreatedatasourceenumerator.
 	/// </summary>
 	// Contract: WAS INVALID CONTRACT TEST (required no enumerator) — NOW VALID OPTIONAL CAPABILITY-AGREEMENT TEST; https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.cancreatedatasourceenumerator
-	[DiagnosticFact]
+	[Fact]
 	public virtual void DbProviderFactory_CanCreateDataSourceEnumerator_is_false()
 		=> AssertOptionalFactoryObject(Fixture.Factory.CanCreateDataSourceEnumerator, Fixture.Factory.CreateDataSourceEnumerator() is not null, "data-source enumerator");
 
 	/// <summary>
 	/// A factory advertising data-source enumeration must return an enumerator
 	/// whose documented metadata operation completes with a data table. An
-	/// unadvertised capability remains an explicit diagnostic skip.
+	/// unadvertised capability is explicitly skipped; an advertised capability
+	/// that cannot be used is a hard failure.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbdatasourceenumerator.getdatasources.
 	/// </summary>
 	// Contract: OPTIONAL CAPABILITY TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbdatasourceenumerator.getdatasources
-	[DiagnosticFact]
+	[Fact]
 	public virtual void DbDataSourceEnumerator_GetDataSources_matches_capability()
 	{
-		if (!Fixture.Factory.CanCreateDataSourceEnumerator)
-			throw Xunit.Sdk.SkipException.ForSkip("The provider does not advertise data-source enumeration.");
-
 		var enumerator = Fixture.Factory.CreateDataSourceEnumerator();
-		Assert.NotNull(enumerator);
+		AssertOptionalFactoryObject(Fixture.Factory.CanCreateDataSourceEnumerator, enumerator is not null, "data-source enumerator");
 		Assert.NotNull(enumerator.GetDataSources());
 	}
 
@@ -244,22 +257,22 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 	/// </summary>
 	#if NETSTANDARD2_0
 	// Contract: TARGET-FRAMEWORK-LIMITED OPTIONAL CAPABILITY CHECK — capability property is unavailable on netstandard2.0; https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory
-	[DiagnosticFact]
+	[Fact]
 	public virtual void DbProviderFactory_CanCreateCommandBuilder_is_true()
 		=> throw Xunit.Sdk.SkipException.ForSkip("Not supported on this TargetFramework");
 
 	// Contract: TARGET-FRAMEWORK-LIMITED OPTIONAL CAPABILITY CHECK — capability property is unavailable on netstandard2.0; https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory
-	[DiagnosticFact]
+	[Fact]
 	public virtual void DbProviderFactory_CanCreateDataAdapter_is_true()
 		=> throw Xunit.Sdk.SkipException.ForSkip("Not supported on this TargetFramework");
 	#else
 	// Contract: WAS INVALID CONTRACT TEST (required command-builder support) — NOW VALID OPTIONAL CAPABILITY-AGREEMENT TEST; https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.cancreatecommandbuilder
-	[DiagnosticFact]
+	[Fact]
 	public virtual void DbProviderFactory_CanCreateCommandBuilder_is_true()
 		=> AssertOptionalFactoryObject(Fixture.Factory.CanCreateCommandBuilder, Fixture.Factory.CreateCommandBuilder() is not null, "command builder");
 
 	// Contract: WAS INVALID CONTRACT TEST (required data-adapter support) — NOW VALID OPTIONAL CAPABILITY-AGREEMENT TEST; https://learn.microsoft.com/dotnet/api/system.data.common.dbproviderfactory.cancreatedataadapter
-	[DiagnosticFact]
+	[Fact]
 	public virtual void DbProviderFactory_CanCreateDataAdapter_is_true()
 		=> AssertOptionalFactoryObject(Fixture.Factory.CanCreateDataAdapter, Fixture.Factory.CreateDataAdapter() is not null, "data adapter");
 	#endif
@@ -272,8 +285,7 @@ public abstract class DbProviderFactoryTestBase<TFixture> : DbFactoryTestBase<TF
 			return;
 		}
 
-		if (created)
-			throw Xunit.Sdk.SkipException.ForSkip($"The provider created optional {feature} support while advertising it as unavailable.");
+		Assert.False(created, $"The provider created {feature} support while advertising it as unavailable.");
 
 		throw Xunit.Sdk.SkipException.ForSkip($"The provider does not expose the optional {feature} capability.");
 	}

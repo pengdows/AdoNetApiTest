@@ -239,12 +239,22 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		}
 	}
 
-	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
-	[Fact]
+	// Contract: COMMON BEHAVIOR TEST — the generic DbConnection contract does not
+	// prescribe repeated-open behavior for every provider; the Microsoft docs give
+	// SqlConnection as an example that rejects it.
+	[DiagnosticFact]
 	public virtual void Open_cannot_be_called_twice()
 	{
 		using var connection = CreateOpenConnection();
-		Assert.Throws<InvalidOperationException>(() => connection.Open());
+		try
+		{
+			connection.Open();
+			SoftWarning.Report("The provider permits Open to be called on an already-open connection.");
+		}
+		catch (Exception ex)
+		{
+			SoftWarning.Report($"The provider rejects repeated Open with {ex.GetType().Name}; repeated-open behavior is provider-specific.");
+		}
 	}
 
 	/// <summary>
@@ -400,14 +410,21 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.Same(connection, command.Connection);
 	}
 
-	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
-	[Fact]
+	// Contract: COMMON BEHAVIOR TEST — DbConnection.CreateCommand does not require a
+	// provider to leave Transaction null; Microsoft.Data.Sqlite documents that it
+	// assigns the connection's current transaction.
+	[DiagnosticFact]
 	public virtual void CreateCommand_does_not_set_Transaction_property()
 	{
 		using var connection = CreateOpenConnection();
 		using var transaction = connection.BeginTransaction();
 		using var command = connection.CreateCommand();
-		Assert.Null(command.Transaction);
+		if (command.Transaction is null)
+		{
+			return;
+		}
+
+		SoftWarning.Report("The provider assigns the current transaction to commands created by the connection.");
 	}
 
 #if NET10_0_OR_GREATER
@@ -419,14 +436,14 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// and https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.createbatch.
 	/// </summary>
 	// Contract: OPTIONAL CAPABILITY TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.cancreatebatch
-	[DiagnosticFact]
+	[Fact]
 	public virtual void CreateBatch_matches_capability()
 	{
 		using var connection = CreateOpenConnection();
 		if (!connection.CanCreateBatch)
 		{
 			Assert.Throws<NotSupportedException>(() => connection.CreateBatch());
-			return;
+			throw Xunit.Sdk.SkipException.ForSkip("The provider does not implement connection-level batches.");
 		}
 
 		using var batch = connection.CreateBatch();

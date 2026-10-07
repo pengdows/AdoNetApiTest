@@ -100,7 +100,7 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 		: SelectOneSql;
 
 	/// <summary>
-	/// Matches the provider-neutral behavior used by pengdows.crud: providers that
+	/// Matches provider-neutral ADO.NET behavior: providers that
 	/// explicitly advertise the positional format '?' use that placeholder; named
 	/// providers receive their advertised marker plus the logical name. Missing or
 	/// unusable DataSourceInformation is allowed to fail rather than being treated as

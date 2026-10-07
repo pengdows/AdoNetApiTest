@@ -20,6 +20,31 @@ public abstract partial class GetValueConversionTestBase<TFixture> : DbFactoryTe
 
 	protected new TFixture Fixture { get; }
 
+	/// <summary>
+	/// GetFieldType describes the CLR type returned by GetValue for the current
+	/// column. Provider-specific native value types are valid; reporting a type
+	/// that GetValue cannot return is not.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbdatareader.getfieldtype
+	/// and https://learn.microsoft.com/dotnet/api/system.data.common.dbdatareader.getvalue.
+	/// </summary>
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbdatareader.getfieldtype
+	[Fact]
+	public virtual void GetFieldType_matches_GetValue_for_supported_values()
+	{
+		foreach (var dbType in Fixture.SupportedDbTypes)
+		{
+			using var connection = CreateOpenConnection();
+			using var command = connection.CreateCommand();
+			command.CommandText = Fixture.CreateSelectSql(dbType, ValueKind.One);
+			using var reader = command.ExecuteReader();
+
+			Assert.True(reader.Read());
+			var value = reader.GetValue(0);
+			Assert.NotSame(DBNull.Value, value);
+			Assert.Equal(value.GetType(), reader.GetFieldType(0));
+		}
+	}
+
 	protected virtual void TestGetFieldType(DbType dbType, ValueKind kind, Type expectedType) => DoTest(dbType, kind, reader => RunSoftValueCheck($"{dbType}/{kind} field type", () => Assert.Equal(expectedType, reader.GetFieldType(0))));
 	protected virtual void TestGetFieldValue<T>(DbType dbType, ValueKind kind, T expected) => DoTest(dbType, kind, reader => RunSoftValueCheck($"{dbType}/{kind} GetFieldValue<{typeof(T).Name}>", () => Assert.Equal(expected, reader.GetFieldValue<T>(0))));
 	protected virtual void TestGetValue<T>(DbType dbType, ValueKind kind, T expected) => DoTest(dbType, kind, reader => RunSoftValueCheck($"{dbType}/{kind} GetValue<{typeof(T).Name}>", () => Assert.Equal(expected, reader.GetValue(0))));

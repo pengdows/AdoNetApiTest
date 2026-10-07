@@ -1,6 +1,6 @@
 using System;
 using System.Data.Common;
-using System.Linq;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace AdoNet.Specification.Tests;
@@ -9,12 +9,12 @@ namespace AdoNet.Specification.Tests;
 /// Tests the ADO.NET affected-row contract for data-modification commands.
 ///
 /// This covers the behavior relied upon by optimistic concurrency and write
-/// success detection in consumers such as pengdows.crud. It is deliberately
-/// separate from the existing SELECT-only ExecuteNonQuery test.
+/// success detection. It is deliberately separate from the existing SELECT-only
+/// ExecuteNonQuery test.
 /// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executenonquery.
 /// </summary>
 public abstract class DmlTestBase<TFixture> : DbFactoryTestBase<TFixture>
-	where TFixture : class, IDbFactoryFixture, IDmlFixture
+	where TFixture : class, IDmlFixture
 {
 	protected DmlTestBase(TFixture fixture)
 		: base(fixture)
@@ -30,41 +30,44 @@ public abstract class DmlTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// </summary>
 	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executenonquery
 	[Fact]
-	public virtual void ExecuteNonQuery_returns_affected_rows_for_DML()
-	{
-		using var connection = CreateOpenConnection();
-		try
-		{
-			ExecuteScript(connection, Fixture.DmlSetupSql);
-			// ADO.NET returns the total number of rows affected by a set-based DML statement.
-			Assert.Equal(2, Execute(connection, Fixture.DmlMultiRowUpdateSql));
-			Assert.Equal(1, Execute(connection, Fixture.DmlInsertSql));
-			Assert.Equal(1, Execute(connection, Fixture.DmlUpdateSql));
-			Assert.Equal(0, Execute(connection, Fixture.DmlUpdateNoRowsSql));
-			Assert.Equal(1, Execute(connection, Fixture.DmlDeleteSql));
-			Assert.Equal(0, Execute(connection, Fixture.DmlDeleteNoRowsSql));
-		}
-		finally
-		{
-			ExecuteScript(connection, Fixture.DmlCleanupSql);
-		}
-	}
+	public virtual void ExecuteNonQuery_returns_multirow_affected_count_for_DML()
+		=> WithDmlState(connection => Assert.Equal(2, Execute(connection, Fixture.DmlMultiRowUpdateSql)));
 
-	/// <summary>
-	/// ADO.NET requires ExecuteNonQuery to return -1 for a result-producing
-	/// statement such as SELECT; the number of returned rows is not an affected
-	/// row count.
-	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executenonquery.
-	/// </summary>
-	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executenonquery
 	[Fact]
-	public virtual void ExecuteNonQuery_returns_negative_one_for_result_producing_statement()
-	{
-		using var connection = CreateOpenConnection();
-		using var command = connection.CreateCommand();
-		command.CommandText = SelectOneSql;
-		Assert.Equal(-1, command.ExecuteNonQuery());
-	}
+	public virtual void ExecuteNonQuery_returns_inserted_row_count()
+		=> WithDmlState(connection => Assert.Equal(1, Execute(connection, Fixture.DmlInsertSql)));
+
+	[Fact]
+	public virtual void ExecuteNonQuery_returns_updated_row_count()
+		=> WithDmlState(connection => Assert.Equal(1, Execute(connection, Fixture.DmlUpdateSql)));
+
+	[Fact]
+	public virtual void ExecuteNonQuery_returns_zero_when_update_matches_no_rows()
+		=> WithDmlState(connection => Assert.Equal(0, Execute(connection, Fixture.DmlUpdateNoRowsSql)));
+
+	[Fact]
+	public virtual void ExecuteNonQuery_returns_deleted_row_count()
+		=> WithDmlState(connection => Assert.Equal(1, Execute(connection, Fixture.DmlDeleteSql)));
+
+	[Fact]
+	public virtual void ExecuteNonQuery_returns_zero_when_delete_matches_no_rows()
+		=> WithDmlState(connection => Assert.Equal(0, Execute(connection, Fixture.DmlDeleteNoRowsSql)));
+
+	[Fact]
+	public virtual async Task ExecuteNonQueryAsync_returns_affected_rows_for_DML()
+		=> await WithDmlStateAsync(async connection =>
+			Assert.Equal(1, await ExecuteAsync(connection, Fixture.DmlUpdateSql).ConfigureAwait(false))).ConfigureAwait(false);
+
+	[Fact]
+	public virtual void ExecuteReader_returns_affected_rows_after_close_for_DML()
+		=> WithDmlState(connection =>
+		{
+			using var command = connection.CreateCommand();
+			command.CommandText = Fixture.DmlDeleteSql;
+			using var reader = command.ExecuteReader();
+			reader.Close();
+			Assert.Equal(1, reader.RecordsAffected);
+		});
 
 	private static int Execute(DbConnection connection, string sql)
 	{
@@ -76,14 +79,63 @@ public abstract class DmlTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// <summary>
 	/// Fixture setup and cleanup may contain multiple provider-specific statements.
 	/// Execute them separately because ADO.NET does not require providers to support
-	/// multi-statement prepares; Informix, for example, rejects them.
+	/// multi-statement prepares; Informix, for example, rejects them. Cleanup is
+	/// best-effort so it cannot replace the setup or assertion failure.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.prepare.
 	/// </summary>
-	private static void ExecuteScript(DbConnection connection, string sql)
+	private void WithDmlState(Action<DbConnection> action)
 	{
-		foreach (var statement in sql.Split(';').Select(statement => statement.Trim()).Where(statement => statement.Length > 0))
+		using var connection = CreateOpenConnection();
+		try
 		{
-			Execute(connection, statement);
+			ExecuteScript(connection, Fixture.DmlSetupSql);
+			action(connection);
 		}
+		finally
+		{
+			TryExecuteScript(connection, Fixture.DmlCleanupSql);
+		}
+	}
+
+	private async Task WithDmlStateAsync(Func<DbConnection, Task> action)
+	{
+		using var connection = CreateOpenConnection();
+		try
+		{
+			ExecuteScript(connection, Fixture.DmlSetupSql);
+			await action(connection).ConfigureAwait(false);
+		}
+		finally
+		{
+			TryExecuteScript(connection, Fixture.DmlCleanupSql);
+		}
+	}
+
+	private static void ExecuteScript(DbConnection connection, System.Collections.Generic.IEnumerable<string> statements)
+	{
+		foreach (var statement in statements)
+		{
+			if (!string.IsNullOrWhiteSpace(statement))
+				Execute(connection, statement);
+		}
+	}
+
+	private static void TryExecuteScript(DbConnection connection, System.Collections.Generic.IEnumerable<string> statements)
+	{
+		try
+		{
+			ExecuteScript(connection, statements);
+		}
+		catch (Exception)
+		{
+			// Cleanup must not replace the assertion or setup exception.
+		}
+	}
+
+	private static async Task<int> ExecuteAsync(DbConnection connection, string sql)
+	{
+		using var command = connection.CreateCommand();
+		command.CommandText = sql;
+		return await command.ExecuteNonQueryAsync().ConfigureAwait(false);
 	}
 }

@@ -30,9 +30,11 @@ The suite has three outcomes:
 1. **Hard failure** — a required contract member is missing or violates its
    documented behavior.
 2. **Skip** — an optional capability is explicitly reported as unsupported.
-3. **Soft warning** — a common provider behavior differs from an
+3. **Soft failure** — a common provider behavior differs from an
    interoperability expectation, but the contract does not prohibit it. The
-   test executes and writes `[SOFT WARNING]`; it is neither skipped nor failed.
+   test remains in the diagnostic result set and writes `[SOFT WARNING]`; it is
+   not treated as a hard conformance failure and is never converted into a
+   capability skip.
 
 ## Contract inventory
 
@@ -90,7 +92,7 @@ one portable result for the scenario; “review” is remaining work.
 | `DbProviderFactory` | command builder, data adapter, data-source enumerator, batch, data source | Capability-agreement coverage; unsupported optional members are skipped only when the factory advertises them as unavailable; an advertised capability that returns null, throws, or produces unusable metadata remains a diagnostic failure |
 | `DbConnectionStringBuilder` | `ConnectionString` default/null behavior | Covered in `ConnectionStringTestBase`; provider-specific keyword grammar is intentionally supplied by the provider and not invented by the shared suite |
 | `DbCommandBuilder` | factory creation and optional capability flags | Capability agreement is covered in `DbProviderFactoryTestBase`; SQL generation, quoting, and schema discovery require provider-specific adapter/table fixtures and are not portable shared assertions |
-| `DbDataSourceEnumerator` | `GetDataSources` | Covered as an opt-in capability agreement in `DbProviderFactoryTestBase`; unadvertised enumeration is an explicit diagnostic skip |
+| `DbDataSourceEnumerator` | `GetDataSources` | Covered as an opt-in capability agreement in `DbProviderFactoryTestBase`; unimplemented enumeration is skipped, while advertised-but-unusable enumeration fails |
 | `DbDataReaderExtensions` | `CanGetColumnSchema`, `GetColumnSchema` | Covered through the reader schema tests; the extension delegates to the reader/provider schema implementation and is not separately duplicated |
 | `DbDataSource` (`net10.0`) | `ConnectionString`, `CreateConnection`, `OpenConnection`, `OpenConnectionAsync`, `CreateCommand`, `CreateBatch`, `DisposeAsync` | Covered by opt-in `DbDataSourceTestBase`; unsupported factory/data-source capabilities are explicitly skipped |
 
@@ -127,6 +129,10 @@ clear.
   than silently guessed.
 - DML affected-row tests distinguish result-producing statements (`-1`) from
   INSERT/UPDATE/DELETE row counts.
+- DML affected-row tests are independent per operation, cover synchronous and
+  asynchronous execution, and verify `DbDataReader.RecordsAffected` after a
+  DML reader is closed. Fixture setup and cleanup are statement lists, and
+  cleanup is best-effort.
 - Shared tests cover `CommandTimeout`, `UpdatedRowSource`,
   `VisibleFieldCount`, parameter property round-trips, and parameter collection
   `AddRange`/`CopyTo` ordering.
