@@ -14,6 +14,7 @@ public class ConnectionStringTestBase<TFixture> : DbFactoryTestBase<TFixture>
 
 	protected new TFixture Fixture { get; }
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnectionstringbuilder
 	[Fact]
 	public void ConnectionString_is_empty_by_default()
 	{
@@ -21,6 +22,7 @@ public class ConnectionStringTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.Equal(string.Empty, builder.ConnectionString);
 	}
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnectionstringbuilder
 	[Fact]
 	public virtual void ConnectionString_set_to_null_is_empty_string()
 	{

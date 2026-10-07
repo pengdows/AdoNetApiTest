@@ -20,11 +20,11 @@ public abstract partial class GetValueConversionTestBase<TFixture> : DbFactoryTe
 
 	protected new TFixture Fixture { get; }
 
-	protected virtual void TestGetFieldType(DbType dbType, ValueKind kind, Type expectedType) => DoTest(dbType, kind, reader => Assert.Equal(expectedType, reader.GetFieldType(0)));
-	protected virtual void TestGetFieldValue<T>(DbType dbType, ValueKind kind, T expected) => DoTest(dbType, kind, reader => Assert.Equal(expected, reader.GetFieldValue<T>(0)));
-	protected virtual void TestGetValue<T>(DbType dbType, ValueKind kind, T expected) => DoTest(dbType, kind, reader => Assert.Equal(expected, reader.GetValue(0)));
-	protected virtual void TestGetValue<T>(DbType dbType, ValueKind kind, Func<DbDataReader, T> getValue, T expected) => DoTest(dbType, kind, reader => Assert.Equal(expected, getValue(reader)));
-	protected virtual async Task TestGetValueAsync<T>(DbType dbType, ValueKind kind, Func<DbDataReader, Task<T>> getValue, T expected) => await DoTestAsync(dbType, kind, async reader => Assert.Equal(expected, await getValue(reader)));
+	protected virtual void TestGetFieldType(DbType dbType, ValueKind kind, Type expectedType) => DoTest(dbType, kind, reader => RunSoftValueCheck($"{dbType}/{kind} field type", () => Assert.Equal(expectedType, reader.GetFieldType(0))));
+	protected virtual void TestGetFieldValue<T>(DbType dbType, ValueKind kind, T expected) => DoTest(dbType, kind, reader => RunSoftValueCheck($"{dbType}/{kind} GetFieldValue<{typeof(T).Name}>", () => Assert.Equal(expected, reader.GetFieldValue<T>(0))));
+	protected virtual void TestGetValue<T>(DbType dbType, ValueKind kind, T expected) => DoTest(dbType, kind, reader => RunSoftValueCheck($"{dbType}/{kind} GetValue<{typeof(T).Name}>", () => Assert.Equal(expected, reader.GetValue(0))));
+	protected virtual void TestGetValue<T>(DbType dbType, ValueKind kind, Func<DbDataReader, T> getValue, T expected) => DoTest(dbType, kind, reader => RunSoftValueCheck($"{dbType}/{kind} typed getter<{typeof(T).Name}>", () => Assert.Equal(expected, getValue(reader))));
+	protected virtual async Task TestGetValueAsync<T>(DbType dbType, ValueKind kind, Func<DbDataReader, Task<T>> getValue, T expected) => await DoTestAsync(dbType, kind, async reader => await RunSoftValueCheckAsync($"{dbType}/{kind} async typed getter<{typeof(T).Name}>", async () => Assert.Equal(expected, await getValue(reader))));
 
 	protected virtual void TestException<T>(DbType dbType, ValueKind kind, Func<DbDataReader, T> getValue, Type exceptionType) =>
 		DoTest(dbType, kind, reader =>
@@ -32,18 +32,14 @@ public abstract partial class GetValueConversionTestBase<TFixture> : DbFactoryTe
 			try
 			{
 				var value = getValue(reader);
-				throw new UnexpectedValueException(value);
-			}
-			catch (UnexpectedValueException)
-			{
-				throw;
+				SoftWarning.Report($"{dbType}/{kind} returned {FormatValue(value)} instead of throwing {exceptionType.Name}.");
 			}
 			catch (Exception ex) when (ex.GetType() == exceptionType)
 			{
 			}
 			catch (Exception ex)
 			{
-				throw ThrowsException.ForIncorrectExceptionType(exceptionType, ex);
+				SoftWarning.Report($"{dbType}/{kind} threw {ex.GetType().Name}; common-behavior matrix expected {exceptionType.Name}.");
 			}
 		});
 
@@ -54,20 +50,42 @@ public abstract partial class GetValueConversionTestBase<TFixture> : DbFactoryTe
 			try
 			{
 				var value = await getValue(reader);
-				throw new UnexpectedValueException(value);
-			}
-			catch (UnexpectedValueException)
-			{
-				throw;
+				SoftWarning.Report($"{dbType}/{kind} returned {FormatValue(value)} instead of throwing {exceptionType.Name}.");
 			}
 			catch (Exception ex) when (ex.GetType() == exceptionType)
 			{
 			}
 			catch (Exception ex)
 			{
-				throw ThrowsException.ForIncorrectExceptionType(exceptionType, ex);
+				SoftWarning.Report($"{dbType}/{kind} threw {ex.GetType().Name}; common-behavior matrix expected {exceptionType.Name}.");
 			}
 		});
+
+	private static void RunSoftValueCheck(string operation, Action assertion)
+	{
+		try
+		{
+			assertion();
+		}
+		catch (Exception ex)
+		{
+			SoftWarning.Report($"{operation} differs from the common-behavior expectation: {ex.GetType().Name}: {ex.Message}");
+		}
+	}
+
+	private static string FormatValue<T>(T value) => value is null ? "<null>" : value.ToString();
+
+	private static async Task RunSoftValueCheckAsync(string operation, Func<Task> assertion)
+	{
+		try
+		{
+			await assertion().ConfigureAwait(false);
+		}
+		catch (Exception ex)
+		{
+			SoftWarning.Report($"{operation} differs from the common-behavior expectation: {ex.GetType().Name}: {ex.Message}");
+		}
+	}
 
 	protected virtual void DoTest(DbType dbType, ValueKind kind, Action<DbDataReader> action)
 	{

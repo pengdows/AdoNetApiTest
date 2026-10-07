@@ -59,6 +59,47 @@ public abstract class DbFactoryTestBase<TFixture> : IAsyncLifetime, IDisposable,
 		=> Fixture.Factory.CreateConnectionStringBuilder();
 
 	/// <summary>
+	/// Returns a provider-valid query that produces one scalar value. Providers
+	/// whose dialect requires a dummy table may override this hook in their
+	/// provider-specific test project; shared tests must not assume that a
+	/// bare <c>SELECT 1</c> is portable.
+	/// </summary>
+	/// <seealso href="https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executereader" />
+	protected virtual string SelectSql(string projection) => $"SELECT {projection};";
+
+	/// <summary>Returns one scalar using the provider's portable SELECT shape.</summary>
+	protected virtual string SelectOneSql => SelectSql("1");
+
+	/// <summary>Returns one scalar with a stable column name.</summary>
+	protected virtual string SelectOneAsIdSql => SelectSql("1 AS id");
+
+	/// <summary>Returns one scalar with the command-test column name.</summary>
+	protected virtual string SelectOneAsValueSql => SelectSql("1 AS value");
+
+	/// <summary>Returns one text scalar.</summary>
+	protected virtual string SelectTextSql => SelectSql("'test'");
+
+	/// <summary>Returns one text scalar with a stable column name.</summary>
+	protected virtual string SelectTextAsIdSql => SelectSql("'test' AS Id");
+
+	/// <summary>Returns two result sets containing one scalar each.</summary>
+	protected virtual string SelectTwoResultsSql => SelectSql("1") + " " + SelectSql("2");
+
+	/// <summary>Returns three result sets containing one scalar each.</summary>
+	protected virtual string SelectThreeResultsSql => SelectSql("1") + " " + SelectSql("2") + " " + SelectSql("3");
+
+	/// <summary>Returns two rows from a single result set.</summary>
+	protected virtual string SelectTwoRowsSql => "SELECT 1 UNION SELECT 2;";
+
+	/// <summary>Returns two known rows with the command-test value aliases.</summary>
+	protected virtual string SelectTwoRows42Sql => "SELECT 42 AS value UNION SELECT 43 AS value ORDER BY value;";
+
+	/// <summary>Returns an empty result followed by one result row.</summary>
+	protected virtual string SelectNoRowsThenOneSql => Fixture is ISelectValueFixture select
+		? select.SelectNoRows + SelectOneSql
+		: SelectOneSql;
+
+	/// <summary>
 	/// Matches the provider-neutral behavior used by pengdows.crud: providers that
 	/// explicitly advertise the positional format '?' use that placeholder; named
 	/// providers receive their advertised marker plus the logical name. Missing or

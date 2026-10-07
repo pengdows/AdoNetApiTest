@@ -1,4 +1,6 @@
+using System;
 using System.Data.Common;
+using System.Linq;
 using Xunit;
 
 namespace AdoNet.Specification.Tests;
@@ -26,13 +28,14 @@ public abstract class DmlTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// means that no row matched the write predicate.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executenonquery.
 	/// </summary>
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executenonquery
 	[Fact]
 	public virtual void ExecuteNonQuery_returns_affected_rows_for_DML()
 	{
 		using var connection = CreateOpenConnection();
 		try
 		{
-			Execute(connection, Fixture.DmlSetupSql);
+			ExecuteScript(connection, Fixture.DmlSetupSql);
 			// ADO.NET returns the total number of rows affected by a set-based DML statement.
 			Assert.Equal(2, Execute(connection, Fixture.DmlMultiRowUpdateSql));
 			Assert.Equal(1, Execute(connection, Fixture.DmlInsertSql));
@@ -43,7 +46,7 @@ public abstract class DmlTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		}
 		finally
 		{
-			Execute(connection, Fixture.DmlCleanupSql);
+			ExecuteScript(connection, Fixture.DmlCleanupSql);
 		}
 	}
 
@@ -53,12 +56,13 @@ public abstract class DmlTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// row count.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executenonquery.
 	/// </summary>
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.executenonquery
 	[Fact]
 	public virtual void ExecuteNonQuery_returns_negative_one_for_result_producing_statement()
 	{
 		using var connection = CreateOpenConnection();
 		using var command = connection.CreateCommand();
-		command.CommandText = "SELECT 1;";
+		command.CommandText = SelectOneSql;
 		Assert.Equal(-1, command.ExecuteNonQuery());
 	}
 
@@ -67,5 +71,19 @@ public abstract class DmlTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		using var command = connection.CreateCommand();
 		command.CommandText = sql;
 		return command.ExecuteNonQuery();
+	}
+
+	/// <summary>
+	/// Fixture setup and cleanup may contain multiple provider-specific statements.
+	/// Execute them separately because ADO.NET does not require providers to support
+	/// multi-statement prepares; Informix, for example, rejects them.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbcommand.prepare.
+	/// </summary>
+	private static void ExecuteScript(DbConnection connection, string sql)
+	{
+		foreach (var statement in sql.Split(';').Select(statement => statement.Trim()).Where(statement => statement.Length > 0))
+		{
+			Execute(connection, statement);
+		}
 	}
 }

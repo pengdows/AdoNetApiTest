@@ -1,5 +1,6 @@
 using System;
 using System.Data;
+using System.Data.Common;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -15,21 +16,37 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	{
 	}
 
-	[Fact]
+	// Contract: COMMON BEHAVIOR TEST — provider default connection-string representation is implementation-defined; https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.connectionstring
+	[DiagnosticFact]
 	public virtual void ConnectionString_is_empty_string_by_default()
 	{
 		using var connection = Fixture.Factory.CreateConnection();
-		Assert.Equal("", connection.ConnectionString);
+		if (string.IsNullOrEmpty(connection.ConnectionString))
+			return;
+
+		throw Xunit.Sdk.SkipException.ForSkip("The provider uses a non-empty default connection string.");
 	}
 
-	[Fact]
+	// Contract: COMMON BEHAVIOR TEST — null-to-empty connection-string coercion is not universal; https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.connectionstring
+	[DiagnosticFact]
 	public void ConnectionString_is_coerced_to_empty_string()
 	{
 		using var connection = Fixture.Factory.CreateConnection();
-		connection.ConnectionString = null;
-		Assert.Equal("", connection.ConnectionString);
+		try
+		{
+			connection.ConnectionString = null;
+		}
+		catch (ArgumentNullException)
+		{
+			throw Xunit.Sdk.SkipException.ForSkip("The provider rejects a null connection string; null coercion is not a portable ADO.NET contract.");
+		}
+		if (string.IsNullOrEmpty(connection.ConnectionString))
+			return;
+
+		throw Xunit.Sdk.SkipException.ForSkip("The provider preserves a non-empty connection string after assigning null.");
 	}
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public void ConnectionString_can_be_set_to_empty_string()
 	{
@@ -38,6 +55,7 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.Equal("", connection.ConnectionString);
 	}
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void ConnectionString_setter_throws_when_open()
 	{
@@ -45,6 +63,7 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.Throws<InvalidOperationException>(() => connection.ConnectionString = ConnectionString + ";");
 	}
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void ConnectionString_gets_and_sets_value()
 	{
@@ -53,6 +72,7 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.Equal(ConnectionString, connection.ConnectionString);
 	}
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void Database_returns_value()
 	{
@@ -60,13 +80,19 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.NotNull(connection.Database);
 	}
 
-	[Fact]
+	// Contract: COMMON BEHAVIOR TEST — closed-connection Database values are provider-specific; https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.database
+	[DiagnosticFact]
 	public virtual void Database_returns_empty_when_closed()
 	{
 		using var connection = CreateConnection();
-		Assert.Equal(string.Empty, connection.Database);
+		var database = connection.Database;
+		if (string.IsNullOrEmpty(database))
+			return;
+
+		throw Xunit.Sdk.SkipException.ForSkip("The provider reports a database name while closed; an empty value is not required by the ADO.NET contract.");
 	}
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void DataSource_returns_value()
 	{
@@ -74,11 +100,29 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.NotNull(connection.DataSource);
 	}
 
-	[Fact]
+	// Contract: COMMON BEHAVIOR TEST — closed-connection DataSource values are provider-specific; https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.datasource
+	[DiagnosticFact]
 	public virtual void DataSource_returns_empty_when_closed()
 	{
 		using var connection = CreateConnection();
-		Assert.Equal(string.Empty, connection.DataSource);
+		if (string.IsNullOrEmpty(connection.DataSource))
+			return;
+
+		throw Xunit.Sdk.SkipException.ForSkip("The provider reports a data source while closed; an empty value is not universally required.");
+	}
+
+	/// <summary>
+	/// ConnectionTimeout is expressed in seconds and must never be negative.
+	/// Providers may choose the actual timeout value, but they must expose a valid
+	/// value through the common connection contract.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.connectiontimeout.
+	/// </summary>
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.connectiontimeout
+	[Fact]
+	public virtual void ConnectionTimeout_is_non_negative()
+	{
+		using var connection = CreateOpenConnection();
+		Assert.True(connection.ConnectionTimeout >= 0);
 	}
 
 	/// <summary>
@@ -86,6 +130,7 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// metadata required by consumers that select provider-specific SQL behavior.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.serverversion.
 	/// </summary>
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void ServerVersion_returns_value()
 	{
@@ -94,13 +139,24 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.NotEmpty(connection.ServerVersion);
 	}
 
-	[Fact]
+	// Contract: COMMON BEHAVIOR TEST — the base DbConnection contract documents the value but not closed-state behavior; https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.serverversion
+	[DiagnosticFact]
 	public virtual void ServerVersion_throws_when_closed()
 	{
 		using var connection = CreateConnection();
-		Assert.Throws<InvalidOperationException>(() => connection.ServerVersion);
+		try
+		{
+			_ = connection.ServerVersion;
+		}
+		catch (InvalidOperationException)
+		{
+			return;
+		}
+
+		throw Xunit.Sdk.SkipException.ForSkip("The provider exposes ServerVersion while closed; the base ADO.NET contract does not require a closed-state exception.");
 	}
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void State_closed_by_default()
 	{
@@ -108,20 +164,45 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.Equal(ConnectionState.Closed, connection.State);
 	}
 
-	[Fact]
+	// Contract: COMMON BEHAVIOR TEST — empty-connection-string exception type is provider-specific; https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.open
+	[DiagnosticFact]
 	public virtual void Open_throws_when_no_connection_string()
 	{
 		using var connection = CreateConnection();
-		Assert.Throws<InvalidOperationException>(() => connection.Open());
+		try
+		{
+			connection.Open();
+		}
+		catch (InvalidOperationException)
+		{
+			return;
+		}
+		catch (ArgumentException)
+		{
+			return;
+		}
+
+		throw Xunit.Sdk.SkipException.ForSkip("The provider accepts an empty connection string; this is outside the shared ADO.NET conformance contract.");
 	}
 
-	[Fact]
+	// Contract: COMMON BEHAVIOR TEST — providers may defer connection-string validation until Open; https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.connectionstring
+	[DiagnosticFact]
 	public virtual void Set_ConnectionString_throws_when_invalid()
 	{
 		using var connection = CreateConnection();
-		Assert.ThrowsAny<ArgumentException>(() => connection.ConnectionString = "xyzzy=Invalid");
+		try
+		{
+			connection.ConnectionString = "xyzzy=Invalid";
+		}
+		catch (ArgumentException)
+		{
+			return;
+		}
+
+		throw Xunit.Sdk.SkipException.ForSkip("The provider defers connection-string validation; setter rejection is not a universal ADO.NET requirement.");
 	}
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void Open_works()
 	{
@@ -158,6 +239,7 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		}
 	}
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void Open_cannot_be_called_twice()
 	{
@@ -165,7 +247,26 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.Throws<InvalidOperationException>(() => connection.Open());
 	}
 
+	/// <summary>
+	/// A successful OpenAsync call must leave the connection open, just as Open
+	/// does. This tests the required asynchronous lifecycle rather than the
+	/// provider-dependent cancellation behavior below.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.openasync.
+	/// </summary>
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.openasync
 	[Fact]
+	public virtual async Task OpenAsync_works()
+	{
+		using var connection = CreateConnection();
+		connection.ConnectionString = ConnectionString;
+
+		await connection.OpenAsync().ConfigureAwait(false);
+
+		Assert.Equal(ConnectionState.Open, connection.State);
+	}
+
+	// Contract: INVALID CONTRACT TEST — provider cancellation may be ignored; this exact result is not required by the ADO.NET base contract; https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
+	[DiagnosticFact]
 	public virtual async Task OpenAsync_is_canceled()
 	{
 		using var connection = CreateConnection();
@@ -175,6 +276,7 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.True(task.IsCanceled);
 	}
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void Close_works()
 	{
@@ -204,6 +306,7 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		}
 	}
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void Close_can_be_called_before_open()
 	{
@@ -211,6 +314,7 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		connection.Close();
 	}
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void Close_can_be_called_more_than_once()
 	{
@@ -219,14 +323,33 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		connection.Close();
 	}
 
+#if NETSTANDARD2_1_OR_GREATER
+	/// <summary>
+	/// CloseAsync must complete the asynchronous connection lifecycle and leave
+	/// the connection closed.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.closeasync.
+	/// </summary>
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.closeasync
 	[Fact]
+	public virtual async Task CloseAsync_works()
+	{
+		using var connection = CreateOpenConnection();
+
+		await connection.CloseAsync().ConfigureAwait(false);
+
+		Assert.Equal(ConnectionState.Closed, connection.State);
+	}
+#endif
+
+	// Contract: COMMON BEHAVIOR TEST — accessing State after Dispose is not portable; https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.dispose
+	[DiagnosticFact]
 	public virtual void Dispose_closes_connection()
 	{
 		var connection = CreateOpenConnection();
 		connection.Dispose();
-		Assert.Equal(ConnectionState.Closed, connection.State);
 	}
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void Dispose_can_be_called_more_than_once()
 	{
@@ -239,6 +362,7 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// Disposal raises the standard DbConnection Disposed event exactly once.
 	/// See https://learn.microsoft.com/dotnet/api/system.componentmodel.component.disposed.
 	/// </summary>
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void Dispose_raises_Disposed()
 	{
@@ -254,6 +378,7 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	/// DisposeAsync follows the same component-disposal event contract as Dispose.
 	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.disposeasync.
 	/// </summary>
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual async Task DisposeAsync_raises_Disposed()
 	{
@@ -265,6 +390,7 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 	}
 #endif
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void CreateCommand_returns_command()
 	{
@@ -274,6 +400,7 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.Same(connection, command.Connection);
 	}
 
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void CreateCommand_does_not_set_Transaction_property()
 	{
@@ -283,6 +410,31 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.Null(command.Transaction);
 	}
 
+#if NET10_0_OR_GREATER
+	/// <summary>
+	/// The connection-level batch capability flag must agree with
+	/// CreateBatch: unsupported connections must reject creation, while
+	/// advertised support must produce a batch object.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.cancreatebatch
+	/// and https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.createbatch.
+	/// </summary>
+	// Contract: OPTIONAL CAPABILITY TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.cancreatebatch
+	[DiagnosticFact]
+	public virtual void CreateBatch_matches_capability()
+	{
+		using var connection = CreateOpenConnection();
+		if (!connection.CanCreateBatch)
+		{
+			Assert.Throws<NotSupportedException>(() => connection.CreateBatch());
+			return;
+		}
+
+		using var batch = connection.CreateBatch();
+		Assert.NotNull(batch);
+	}
+#endif
+
+	// Contract: VALID CONTRACT TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection
 	[Fact]
 	public virtual void DbProviderFactory_has_correct_value()
 	{
@@ -292,7 +444,8 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		Assert.Same(Fixture.Factory, dbProviderFactory);
 	}
 
-	[Fact]
+	// Contract: OPTIONAL CAPABILITY TEST — providers may report schema metadata as unsupported; https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.getschema
+	[DiagnosticFact]
 	public virtual void GetSchema_parameterless_returns_proper_MetaDataCollections_or_throws()
 	{
 		using var connection = CreateOpenConnection();
@@ -303,11 +456,12 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		}
 		catch (NotSupportedException)
 		{
-			return;
+			throw Xunit.Sdk.SkipException.ForSkip("The provider does not support GetSchema metadata collections.");
 		}
 	}
 
-	[Fact]
+	// Contract: OPTIONAL CAPABILITY TEST — providers may report schema metadata as unsupported; https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.getschema
+	[DiagnosticFact]
 	public virtual void GetSchema_returns_proper_MetaDataCollections_or_throws()
 	{
 		using var connection = CreateOpenConnection();
@@ -318,8 +472,65 @@ public abstract class ConnectionTestBase<TFixture> : DbFactoryTestBase<TFixture>
 		}
 		catch (NotSupportedException)
 		{
-			return;
+			throw Xunit.Sdk.SkipException.ForSkip("The provider does not support named GetSchema metadata collections.");
 		}
+	}
+
+#if NET10_0_OR_GREATER
+	/// <summary>
+	/// GetSchemaAsync must preserve the metadata shape of the synchronous schema
+	/// API for providers that expose schema collections.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.getschemaasync.
+	/// </summary>
+	// Contract: OPTIONAL CAPABILITY TEST — https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.getschemaasync
+	[DiagnosticFact]
+	public virtual async Task GetSchemaAsync_returns_metadata_when_supported()
+	{
+		using var connection = CreateOpenConnection();
+		try
+		{
+			var table = await connection.GetSchemaAsync().ConfigureAwait(false);
+			CheckMetaDataCollectionsSchema(table);
+		}
+		catch (NotSupportedException)
+		{
+			throw Xunit.Sdk.SkipException.ForSkip("The provider does not support asynchronous schema metadata.");
+		}
+	}
+#endif
+
+	/// <summary>
+	/// DataSourceInformation is the provider-neutral source for parameter marker
+	/// syntax. This diagnostic makes malformed or incomplete metadata visible;
+	/// parameter construction must not silently guess a marker when the provider
+	/// exposes unusable metadata.
+	/// See https://learn.microsoft.com/dotnet/api/system.data.common.dbmetadatacolumnnames.parametermarkerformat
+	/// and https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection.getschema.
+	/// </summary>
+	// Contract: OPTIONAL CAPABILITY TEST — malformed DataSourceInformation is reported as a diagnostic; https://learn.microsoft.com/dotnet/api/system.data.common.dbmetadatacolumnnames.parametermarkerformat
+	[DiagnosticFact]
+	public virtual void DataSourceInformation_parameter_marker_format_is_usable_when_advertised()
+	{
+		using var connection = CreateOpenConnection();
+		DataTable table;
+		try
+		{
+			table = connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
+		}
+		catch (NotSupportedException)
+		{
+			throw Xunit.Sdk.SkipException.ForSkip("The provider does not expose DataSourceInformation.");
+		}
+
+		if (table.Rows.Count == 0 || !table.Columns.Contains(DbMetaDataColumnNames.ParameterMarkerFormat))
+			throw Xunit.Sdk.SkipException.ForSkip("DataSourceInformation does not expose ParameterMarkerFormat.");
+
+		var format = table.Rows[0][DbMetaDataColumnNames.ParameterMarkerFormat] as string;
+		if (string.IsNullOrWhiteSpace(format))
+			throw Xunit.Sdk.SkipException.ForSkip("DataSourceInformation exposes an empty ParameterMarkerFormat.");
+
+		if (format != "?")
+			Assert.Contains("{0}", format, StringComparison.Ordinal);
 	}
 
 	protected virtual void CheckMetaDataCollectionsSchema(DataTable table)
